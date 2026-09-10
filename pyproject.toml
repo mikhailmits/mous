@@ -1,0 +1,27 @@
+[project]
+name = "mous"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "mikhail", email = "kanalut5627@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.141.1",
+    "oxyde>=0.8.0",
+    "uvicorn>=0.52.4",
+]
+
+[project.scripts]
+mous = "mous:main"
+dev = "mous:run_macos_dev"
+
+[build-system]
+requires = ["uv_build>=0.12.3,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+]

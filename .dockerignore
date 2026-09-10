@@ -1,0 +1,12 @@
+.venv
+.git
+.cursor
+macos
+activate
+**/__pycache__
+**/*.py[cod]
+*.egg-info
+data.db
+**/.DS_Store
+**/.swiftpm
+**/.build

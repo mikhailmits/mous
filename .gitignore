@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+wheels/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+activate/
+
+# Local SQLite
+data.db
+data.db-journal
+data.db-wal
+data.db-shm
+*.sqlite3
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Swift / Xcode
+**/.build/
+**/.swiftpm/
+**/DerivedData/
+*.xcuserstate
+xcuserdata/
+*.dSYM/
+
+# OS / editor
+.DS_Store
+.idea/
+*.swp
+*~

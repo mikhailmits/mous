@@ -1,0 +1,26 @@
+services:
+  api:
+    build: .
+    image: mous-api
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      MOUS_DATABASE_URL: sqlite:////data/data.db
+    volumes:
+      - mous-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/openapi.json')",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 8s
+
+volumes:
+  mous-data:
