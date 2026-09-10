@@ -11,10 +11,10 @@ macOS only (14+). This is a work in progress.
 Just tell your agent to install the app!
 
 ```
-Download the latest Mous .dmg from https://github.com/mikhailmits/mous/releases, open it, and drag Mous.app to Applications. If Gatekeeper blocks it, right-click → Open. macOS 14+ only; Windows and Linux are not supported yet.
+Download the latest Mous .dmg from https://github.com/mikhailmits/mous/releases, open it, and drag Mous onto Applications. macOS 14+ only; Windows and Linux are not supported yet. This is a work in progress.
 ```
 
-Or grab it yourself: [latest release](https://github.com/mikhailmits/mous/releases/latest). Drag `Mous.app` to Applications. If Gatekeeper blocks it, right-click → Open.
+Or grab it yourself: [latest release](https://github.com/mikhailmits/mous/releases/latest). Open the `.dmg` and drag **Mous** onto **Applications**.
 
 ## What it is
 

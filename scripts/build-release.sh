@@ -47,6 +47,7 @@ uv run pyinstaller \
 
 test -x "$SWIFT_BIN"
 test -x "$API_BIN"
+test -f "$ROOT/macos/Mous/Icon/AppIcon.icns"
 
 echo "==> Assemble $APP"
 rm -rf "$APP"
@@ -55,6 +56,7 @@ cp "$SWIFT_BIN" "$MACOS/Mous"
 cp "$API_BIN" "$MACOS/mous-api"
 chmod +x "$MACOS/Mous" "$MACOS/mous-api"
 cp "$ROOT/macos/Mous/Sources/Mous/Info.plist" "$CONTENTS/Info.plist"
+cp "$ROOT/macos/Mous/Icon/AppIcon.icns" "$RESOURCES/AppIcon.icns"
 cp "$ROOT/migrations/"*.py "$RESOURCES/migrations/"
 cp "$ROOT/oxyde_config.py" "$RESOURCES/oxyde_config.py"
 
@@ -67,10 +69,20 @@ fi
 DMG="$DIST/Mous-${VERSION}.dmg"
 echo "==> $DMG"
 rm -f "$DMG"
-hdiutil create -volname Mous -srcfolder "$APP" -ov -format UDZO "$DMG" >/dev/null
+for vol in /Volumes/Mous /Volumes/Mous\ 1; do
+  [ -d "$vol" ] && hdiutil detach "$vol" -force >/dev/null 2>&1 || true
+done
+
+uv run dmgbuild \
+  -s "$ROOT/scripts/dmg_settings.py" \
+  -D app="$APP" \
+  -D background="$ROOT/macos/Mous/Icon/dmg-background.png" \
+  -D icon="$ROOT/macos/Mous/Icon/AppIcon.icns" \
+  "Mous" \
+  "$DMG"
 
 echo
 echo "Built:"
 echo "  $APP"
 echo "  $DMG"
-echo "Open once with right-click → Open if Gatekeeper blocks it."
+echo "Open the DMG and drag Mous onto Applications."

@@ -89,7 +89,7 @@ git tag vX.Y.Z
 git push origin HEAD
 git push origin vX.Y.Z
 gh release create "vX.Y.Z" --title "mous X.Y.Z" \
-  --notes "Drag Mous.app to Applications. Right-click → Open the first time if Gatekeeper warns." \
+  --notes "Drag Mous.app to Applications, then run \`xattr -dr com.apple.quarantine /Applications/Mous.app\` once (the app is ad-hoc signed, not notarized, so macOS quarantines downloads)." \
   "dist/Mous-X.Y.Z.dmg"
 ```
 
@@ -102,10 +102,13 @@ the user asked for.
 Mous.app/
   Contents/MacOS/Mous          # Swift popup
   Contents/MacOS/mous-api      # frozen FastAPI
+  Contents/Resources/AppIcon.icns
   Contents/Resources/migrations/
   Contents/Resources/oxyde_config.py
   Contents/Info.plist
 ```
+
+The DMG is drag-to-install: `Mous.app` and an `Applications` alias.
 
 User data: `~/Library/Application Support/mous/data.db`
 Helper logs: `~/Library/Application Support/mous/logs/`

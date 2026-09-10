@@ -1,6 +1,6 @@
 [project]
 name = "mous"
-version = "0.1.0"
+version = "0.1.1"
 description = "Add your description here"
 readme = "README.md"
 authors = [
@@ -27,4 +27,5 @@ dev = [
 ]
 release = [
     "pyinstaller>=6.16.0",
+    "dmgbuild>=1.6.5",
 ]
