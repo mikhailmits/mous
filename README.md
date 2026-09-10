@@ -47,6 +47,14 @@ Two parts, both on your machine — nothing leaves your computer:
   accounts, transactions, currencies and categories. The app talks to it on
   `127.0.0.1:8000` and refuses to talk to anything else.
 
+## Install it
+
+Just tell your agent to install the app!
+
+```
+Clone https://github.com/mikhailmits/mous, start the API with docker compose up -d, then run the macOS popup with uv run mous dev. I need Docker running and a Swift toolchain (macOS 14+).
+```
+
 ## Run it
 
 Backend (Docker):
