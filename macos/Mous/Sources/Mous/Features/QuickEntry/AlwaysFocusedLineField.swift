@@ -52,6 +52,11 @@ struct AlwaysFocusedLineField: NSViewRepresentable {
         context.coordinator.onSubmit = onSubmit
         if field.stringValue != text {
             field.stringValue = text
+            // Programmatic text change (e.g. demo typing): keep the caret at
+            // the end instead of leaving everything selected.
+            if let editor = field.currentEditor() {
+                editor.selectedRange = NSRange(location: (text as NSString).length, length: 0)
+            }
         }
         context.coordinator.claimFocusIfNeeded()
     }
