@@ -11,10 +11,18 @@ macOS only (14+). This is a work in progress.
 Just tell your agent to install the app!
 
 ```
-Download the latest Mous .dmg from https://github.com/mikhailmits/mous/releases, open it, and drag Mous onto Applications. macOS 14+ only; Windows and Linux are not supported yet. This is a work in progress.
+Download the latest Mous .dmg from https://github.com/mikhailmits/mous/releases, open it, drag Mous onto Applications, then run: xattr -cr /Applications/Mous.app && open /Applications/Mous.app
+macOS 14+ only; Windows and Linux are not supported yet. This is a work in progress. The app is not notarized, so macOS will block it until that command clears quarantine.
 ```
 
-Or grab it yourself: [latest release](https://github.com/mikhailmits/mous/releases/latest). Open the `.dmg` and drag **Mous** onto **Applications**.
+Or do it yourself:
+
+1. Get the [latest release](https://github.com/mikhailmits/mous/releases/latest), open the `.dmg`, drag **Mous** onto **Applications**.
+2. macOS will refuse to open it (not notarized yet). Clear that once:
+
+```sh
+xattr -cr /Applications/Mous.app && open /Applications/Mous.app
+```
 
 ## What it is
 

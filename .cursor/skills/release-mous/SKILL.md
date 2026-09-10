@@ -89,7 +89,7 @@ git tag vX.Y.Z
 git push origin HEAD
 git push origin vX.Y.Z
 gh release create "vX.Y.Z" --title "mous X.Y.Z" \
-  --notes "Drag Mous.app to Applications, then run \`xattr -dr com.apple.quarantine /Applications/Mous.app\` once (the app is ad-hoc signed, not notarized, so macOS quarantines downloads)." \
+  --notes "Drag Mous onto Applications, then run: xattr -cr /Applications/Mous.app && open /Applications/Mous.app (ad-hoc signed, not notarized — macOS blocks downloads until quarantine is cleared)." \
   "dist/Mous-X.Y.Z.dmg"
 ```
 
