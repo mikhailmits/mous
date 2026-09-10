@@ -20,6 +20,15 @@ from mous.api.routers import (
 
 
 def _project_root() -> Path:
+    """Repo root, or the frozen bundle's extra-files directory."""
+    override = os.environ.get("MOUS_PROJECT_ROOT")
+    if override:
+        return Path(override)
+    if getattr(sys, "frozen", False):
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            return Path(meipass)
+        return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parents[3]
 
 
@@ -27,9 +36,9 @@ def _databases() -> dict[str, str]:
     override = os.environ.get("MOUS_DATABASE_URL")
     if override:
         return {"default": override}
-    root = str(_project_root())
-    if root not in sys.path:
-        sys.path.insert(0, root)
+    root = _project_root()
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
     import oxyde_config
 
     return oxyde_config.DATABASES
@@ -67,6 +76,11 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     install_error_handlers(app)
+
+    @app.get("/health", include_in_schema=False)
+    async def health() -> dict[str, str]:
+        return {"status": "ok"}
+
     app.include_router(accounts_router)
     app.include_router(transactions_router)
     app.include_router(subscriptions_router)

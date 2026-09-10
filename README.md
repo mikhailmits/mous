@@ -4,6 +4,18 @@ A tiny macOS popup for tracking your spending. Type one line, hit Return, done.
 
 ![Typing a spending line into mous and watching the totals update](docs/demo.gif)
 
+## Install it
+
+Just tell your agent to install the app!
+
+```
+Clone https://github.com/mikhailmits/mous, start the API with docker compose up -d, then run the macOS popup with uv run mous dev. I need Docker running and a Swift toolchain (macOS 14+).
+```
+
+A double-clickable app (no Docker) is `dist/Mous.app`, built with
+`./scripts/build-release.sh`. Drag it to Applications. If Gatekeeper blocks it,
+right-click → Open.
+
 ## What it is
 
 mous is a small always-at-hand window with exactly one input field. You write
@@ -46,14 +58,6 @@ Two parts, both on your machine — nothing leaves your computer:
 - **The API** — a small FastAPI + SQLite backend (`src/mous`) that stores
   accounts, transactions, currencies and categories. The app talks to it on
   `127.0.0.1:8000` and refuses to talk to anything else.
-
-## Install it
-
-Just tell your agent to install the app!
-
-```
-Clone https://github.com/mikhailmits/mous, start the API with docker compose up -d, then run the macOS popup with uv run mous dev. I need Docker running and a Swift toolchain (macOS 14+).
-```
 
 ## Run it
 

@@ -42,7 +42,9 @@ data.db-shm
 xcuserdata/
 *.dSYM/
 
-# OS / editor
+# Release / packaging
+dist/
+*.spec
 .DS_Store
 .idea/
 *.swp

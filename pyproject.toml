@@ -25,3 +25,6 @@ build-backend = "uv_build"
 dev = [
     "httpx>=0.28.1",
 ]
+release = [
+    "pyinstaller>=6.16.0",
+]

@@ -26,8 +26,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
         let panel = BorderlessPanelController(store: store)
         self.panel = panel
-        panel.show()
-        runDemoDirector()
+        if LocalBackend.shared.isBundled {
+            Task { @MainActor [weak self] in
+                await LocalBackend.shared.start()
+                self?.panel?.show()
+                self?.runDemoDirector()
+            }
+        } else {
+            panel.show()
+            runDemoDirector()
+        }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        LocalBackend.shared.stop()
     }
 
     /// Screenshot/demo mode, driven by environment variables:
