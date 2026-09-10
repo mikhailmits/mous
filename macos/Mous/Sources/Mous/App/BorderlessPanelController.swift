@@ -225,6 +225,12 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
         }
     }
 
+    /// Demo/screenshot hook (`MOUS_DEMO_TIP`): open and pin a tip exactly
+    /// as ⌘M / ⌘X would.
+    func openTipFromDemo(kind: DashboardTipKind) {
+        openTip(kind: kind)
+    }
+
     private func openTip(kind: DashboardTipKind) {
         guard store.hasLoadedDashboard else { return }
         hoverGeneration += 1
