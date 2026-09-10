@@ -6,15 +6,15 @@ A tiny macOS popup for tracking your spending. Type one line, hit Return, done.
 
 ## Install it
 
+macOS only (14+). This is a work in progress.
+
 Just tell your agent to install the app!
 
 ```
-Clone https://github.com/mikhailmits/mous, start the API with docker compose up -d, then run the macOS popup with uv run mous dev. I need Docker running and a Swift toolchain (macOS 14+).
+Download the latest Mous .dmg from https://github.com/mikhailmits/mous/releases, open it, and drag Mous.app to Applications. If Gatekeeper blocks it, right-click → Open. macOS 14+ only; Windows and Linux are not supported yet.
 ```
 
-A double-clickable app (no Docker) is `dist/Mous.app`, built with
-`./scripts/build-release.sh`. Drag it to Applications. If Gatekeeper blocks it,
-right-click → Open.
+Or grab it yourself: [latest release](https://github.com/mikhailmits/mous/releases/latest). Drag `Mous.app` to Applications. If Gatekeeper blocks it, right-click → Open.
 
 ## What it is
 
