@@ -274,6 +274,24 @@ def tool_rollup(bundle: Bundle) -> str:
     return json.dumps(payload, separators=(",", ":"))
 
 
+def _desc(mapping: dict[str, float]) -> dict[str, float]:
+    return dict(sorted(mapping.items(), key=lambda kv: (-kv[1], kv[0])))
+
+
+@fn_codec(
+    "tool_rollup_ranked",
+    "tools",
+    "Same GROUP-BYs as tool_rollup, but spend maps are sorted high-to-low so argmax is the first key. total_expense=sum(spend_by_category); total_income=sum(income_by_category); net=income-expense; top=first spend key; discretionary_share=sum(discretionary_spend) MONEY; best_single_cut=first discretionary key; last3 naive=mean. Do not use months outside last3.",
+    reversible=False,
+)
+def tool_rollup_ranked(bundle: Bundle) -> str:
+    payload = json.loads(tool_rollup.encode(bundle).token_payload)
+    payload["spend_by_category"] = _desc(payload["spend_by_category"])
+    payload["income_by_category"] = _desc(payload["income_by_category"])
+    payload["discretionary_spend"] = _desc(payload["discretionary_spend"])
+    return json.dumps(payload, separators=(",", ":"))
+
+
 def reconstruct_from_rollup(payload: dict) -> dict:
     """Local check that tool_rollup numbers reconstruct gold task fields."""
     spend = payload["spend_by_category"]
