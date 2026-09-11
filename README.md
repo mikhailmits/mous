@@ -28,18 +28,11 @@ xattr -cr /Applications/Mous.app && open /Applications/Mous.app
 
 mous is a tiny window where you quickly see all your spendings and things you may optimize. In mous you have only two components - the dashboard where you see all finances analysis and the input bar where you note your finances to the app
 
-```
--4.50 coffee with dave      → spent €4.50
--23.10 groceries            → spent €23.10
-+2600 salary                → got €2,600
--24uah taxi                 → spent 24 hryvnia (any currency you add)
-```
-
 ![The mous popup: spent today, money left, month total and saved percent](docs/main.png)
 
 ## Oh.. Cool things btw
 
-You've got two shortcuts - cmd + m and cmd + x, first one shows the monthly money operations and the second one shows your most expensive spendings throughout the month, so don't forget to pay attention to those!
+You've got two shortcuts - <kbd>⌘</kbd> <kbd>M</kbd> and <kbd>⌘</kbd> <kbd>X</kbd>, first one shows the monthly money operations and the second one shows your most expensive spendings throughout the month, so don't forget to pay attention to those!
 
 ![History tip listing this month's transactions grouped by day](docs/history.png)
 
