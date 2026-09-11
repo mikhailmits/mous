@@ -1219,13 +1219,15 @@ def write_report(
         "## 1-bit vs packed bitmap vs color",
         "",
         "- **1-bit PNG** (`img_4col_1bit`, `img_2tile_compact`): smallest files, sharp glyphs,",
-        "  no dither. Preferred for OCR.",
-        "- **Grayscale L** (`img_4col_gray`): same tiles, larger files; only useful if a",
-        "  font antialiases (default bitmap font barely does).",
-        "- **RGB + category gutters** (`img_4col_color`): same tiles, largest files. Black",
-        "  text preserved; 3px hue gutter may help reports/optimize without painting gold.",
-        "- **Packed 5×7 bitmap** (`img_packed_bitmap`): 2-tile budget, LED stamps, 0 tracking.",
-        "  Densest reversible packing. Looks unlike natural photos; OCR is an open question.",
+        "  no dither. Preferred for OCR. `img_4col_1bit` is **44,689 bytes**.",
+        "- **Grayscale L** (`img_4col_gray`): same 765 tiles, **117,920 bytes** (2.6× 1-bit).",
+        "  Default bitmap font barely antialiases; this is wasted weight.",
+        "- **RGB + category gutters** (`img_4col_color`): same 765 tiles, **194,361 bytes**",
+        "  (4.3× 1-bit). Black text preserved; 3px hue gutter may help reports/optimize",
+        "  without painting gold.",
+        "- **Packed 5×7 bitmap** (`img_packed_bitmap`): 425-token 2-tile budget, LED stamps,",
+        "  0 tracking, 13-char day-index (16-char×5×7×1000 = 560k cells > 512×1024). Crisp",
+        "  at 4× zoom; at native 1× it looks like a barcode. VLM OCR unproven.",
         "",
         "## Low detail = 85 (quality risk)",
         "",
@@ -1238,54 +1240,60 @@ def write_report(
         "## Can a model actually read 1000 painted lines?",
         "",
         "**Tall PNG (360×9004): no.** After the official scale the type is ~2px. That",
-        "765-token number is real and also useless.",
+        "765-token number is real and also useless. See `results/images/previews/tall_png_original_scaled.png`.",
         "",
-        "**Native 4-col 512×2048 (`img_4col_1bit`): maybe, not proven by tile math.**",
-        "Glyphs stay ~7–8px at high detail, 1000 rows, 4 columns. A VLM *can* read a",
-        "screenshot of a table at that size, but 1000 rows is a long sequential scan;",
-        "expect dropped rows, column mix-ups, and arithmetic errors even if glyphs are",
-        "legible. Counting `n_transactions=1000` is easier than summing 942 expenses.",
+        "**Native 4-col 512×2048 (`img_4col_1bit`): partially.** Glyphs stay 8px at high",
+        "detail (no 2048 crush). One Gemini 2.5 Flash call (below) counted 1000 rows and",
+        "named rent as top category, then invented `total_expense=59999.99` (gold 75572.82,",
+        "~21% low). So the layout is OCR-able enough to *see structure and large rent",
+        "rows*, not OCR-able enough to sum 942 expenses. Tile savings ≠ reports accuracy.",
         "",
-        "**2-tile compact (512×1024, ~5px): unlikely for sums.** Legible to a determined",
-        "human with zoom; VLMs usually fail at 4–6px condensed type, especially 6 columns.",
+        "**2-tile compact (512×1024, ~5–6px): unlikely for sums.** Cheapest fair packing",
+        "(425). Legible to a human with zoom; VLMs usually fail at this density.",
         "",
-        "**1-tile micro (~4px, 10 columns): no.**",
+        "**1-tile micro (~4px, 10 columns, 255 tokens): no.** Density stunt.",
         "",
-        "Two-column full ledgers were tried on paper: 500 rows × 8px = 4000px height,",
-        "which exceeds 2048 and gets crushed. **Minimum columns for native 8px on a",
-        "4-tile canvas is 4.** That is why the fair packing is a 4-column grid, not a",
-        "2-column book page.",
+        "Two-column full ledgers do not fit: 500 rows × 8px = 4000px height, which exceeds",
+        "2048 and gets crushed. **Minimum columns for native 8px on a 4-tile canvas is 4.**",
         "",
     ]
     if probe is not None:
+        m = probe.get("match") if isinstance(probe.get("match"), dict) else {}
+        usage = probe.get("usage") or {}
         parts += [
             "## Gateway vision probe (one image, ≤$1, no retries)",
             "",
-            f"- model: `{probe.get('model', '—')}`",
-            f"- image: `{probe.get('image', '—')}`",
-            f"- high-detail tokens (formula): {probe.get('high_tokens', '—')}",
+            f"- model: `{probe.get('model', '—')}` (vision-capable, cheap)",
+            f"- image: `{probe.get('image', '—')}` (`img_4col_1bit`, 512×2048 1-bit, 4-col named)",
+            f"- OpenAI high-detail formula: {probe.get('high_tokens', '—')} tokens",
+            f"- gateway billed prompt_tokens={usage.get('prompt_tokens')} "
+            f"completion_tokens={usage.get('completion_tokens')} cost=${usage.get('cost')}",
+            "  (Gemini's tokenizer is not the 85+170×tiles formula; do not mix them.)",
             f"- ok: {probe.get('ok')}",
             f"- error: {probe.get('error') or 'none'}",
             f"- parsed: `{json.dumps(probe.get('parsed') or {}, sort_keys=True)}`",
-            f"- gold: n=1000, total_expense=75572.82, top=rent",
-            f"- match: {probe.get('match')}",
-            f"- usage: `{json.dumps(probe.get('usage') or {}, sort_keys=True)}`",
+            "- gold: n=1000, total_expense=75572.82, top=rent",
+            f"- match: n={m.get('n_transactions')} expense={m.get('total_expense')} "
+            f"top={m.get('top_category')} all={m.get('all')}",
             "",
             "```",
             (probe.get("preview") or "")[:1500],
             "```",
             "",
         ]
-        if probe.get("ok") and probe.get("match"):
+        if probe.get("ok") and m.get("all"):
             parts.append(
-                "The cheap vision model recovered n / total_expense / top category from the "
-                "fair 4-col image. That is **not** proof it can do optimize + forecasts on "
-                "all 1000 rows, but it is evidence the layout is OCR-able for reports-scale questions."
+                "All three probe fields matched. That is still not proof of optimize + "
+                "forecasts over 1000 rows."
             )
         elif probe.get("ok"):
             parts.append(
-                "The call succeeded but the answers were wrong or incomplete. Treat 1000-line "
-                "OCR as **unreliable** even at native 8px. Tile savings do not equal task accuracy."
+                "Partial read: the model got **n=1000** and **top=rent**, then failed the "
+                "expense sum (`59999.99` vs `75572.82`). A 1000-line native 8px grid is "
+                "OCR-able enough to count rows and spot rent, **not** accurate enough to "
+                "replace compact JSON for reports arithmetic. Caveat: the prompt mentioned "
+                "the number 1000 while telling the model not to guess it — treat the n=1000 "
+                "hit as weaker evidence than top=rent. No retries (budget rule)."
             )
         else:
             parts.append(

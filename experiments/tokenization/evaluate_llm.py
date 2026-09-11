@@ -99,7 +99,7 @@ def _extract_json(text: str) -> dict:
         return {}
 
 
-def chat(model: str, messages: list[dict], max_tokens: int = 900) -> dict:
+def chat(model: str, messages: list[dict], max_tokens: int = 900, timeout: float = 90.0) -> dict:
     headers = {
         "Authorization": f"Bearer {_key()}",
         "Content-Type": "application/json",
@@ -112,10 +112,28 @@ def chat(model: str, messages: list[dict], max_tokens: int = 900) -> dict:
         "temperature": 0,
         "max_tokens": max_tokens,
     }
-    with httpx.Client(timeout=90.0) as client:
+    with httpx.Client(timeout=timeout) as client:
         response = client.post(_chat_url(), headers=headers, json=body)
         response.raise_for_status()
         return response.json()
+
+
+def merge_eval_rows(
+    path: Path,
+    new_results: list[dict],
+    key_fields: tuple[str, ...] = ("model", "codec", "task"),
+) -> list[dict]:
+    existing: dict[tuple, dict] = {}
+    if path.exists():
+        try:
+            old = json.loads(path.read_text(encoding="utf-8"))
+            for row in old.get("results", []):
+                existing[tuple(row.get(field) for field in key_fields)] = row
+        except (json.JSONDecodeError, OSError):
+            pass
+    for row in new_results:
+        existing[tuple(row.get(field) for field in key_fields)] = row
+    return list(existing.values())
 
 
 def pick_models(limit: int = 3) -> list[str]:
@@ -145,15 +163,17 @@ def run(
     model_limit: int = 2,
     codec_names: list[str] | None = None,
     models: list[str] | None = None,
+    merge: bool | None = None,
 ) -> dict:
     load_all()
     bundle = load_bundle()
     gold = load_gold()
     models = models or pick_models(limit=model_limit)
     names = codec_names or LLM_CODECS
+    merge = codec_names is not None if merge is None else merge
     encoded = {item.name: item for item in encode_all(bundle) if item.name in names}
     results = []
-    spend_note = []
+    path = RESULTS / "llm_eval.json"
     for model in models:
         for name in names:
             result = encoded.get(name)
@@ -208,9 +228,12 @@ def run(
                 results.append(record)
                 time.sleep(0.15)
 
+    if merge:
+        results = merge_eval_rows(path, results)
+        names = sorted({row.get("codec") for row in results if row.get("codec")})
+        models = sorted({row.get("model") for row in results if row.get("model")})
     summary = _summarize(results)
     payload = {"models": models, "codecs": names, "results": results, "summary": summary}
-    path = RESULTS / "llm_eval.json"
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     print(f"wrote {path}")
     return payload

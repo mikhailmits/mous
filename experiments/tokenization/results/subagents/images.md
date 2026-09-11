@@ -75,13 +75,15 @@ the max category and average the last 3 month rows. Still pre-aggregation.
 ## 1-bit vs packed bitmap vs color
 
 - **1-bit PNG** (`img_4col_1bit`, `img_2tile_compact`): smallest files, sharp glyphs,
-  no dither. Preferred for OCR.
-- **Grayscale L** (`img_4col_gray`): same tiles, larger files; only useful if a
-  font antialiases (default bitmap font barely does).
-- **RGB + category gutters** (`img_4col_color`): same tiles, largest files. Black
-  text preserved; 3px hue gutter may help reports/optimize without painting gold.
-- **Packed 5×7 bitmap** (`img_packed_bitmap`): 2-tile budget, LED stamps, 0 tracking.
-  Densest reversible packing. Looks unlike natural photos; OCR is an open question.
+  no dither. Preferred for OCR. `img_4col_1bit` is **44,689 bytes**.
+- **Grayscale L** (`img_4col_gray`): same 765 tiles, **117,920 bytes** (2.6× 1-bit).
+  Default bitmap font barely antialiases; this is wasted weight.
+- **RGB + category gutters** (`img_4col_color`): same 765 tiles, **194,361 bytes**
+  (4.3× 1-bit). Black text preserved; 3px hue gutter may help reports/optimize
+  without painting gold.
+- **Packed 5×7 bitmap** (`img_packed_bitmap`): 425-token 2-tile budget, LED stamps,
+  0 tracking, 13-char day-index (16-char×5×7×1000 = 560k cells > 512×1024). Crisp
+  at 4× zoom; at native 1× it looks like a barcode. VLM OCR unproven.
 
 ## Low detail = 85 (quality risk)
 
@@ -94,35 +96,34 @@ fair full-ledger cost.
 ## Can a model actually read 1000 painted lines?
 
 **Tall PNG (360×9004): no.** After the official scale the type is ~2px. That
-765-token number is real and also useless.
+765-token number is real and also useless. See `results/images/previews/tall_png_original_scaled.png`.
 
-**Native 4-col 512×2048 (`img_4col_1bit`): maybe, not proven by tile math.**
-Glyphs stay ~7–8px at high detail, 1000 rows, 4 columns. A VLM *can* read a
-screenshot of a table at that size, but 1000 rows is a long sequential scan;
-expect dropped rows, column mix-ups, and arithmetic errors even if glyphs are
-legible. Counting `n_transactions=1000` is easier than summing 942 expenses.
+**Native 4-col 512×2048 (`img_4col_1bit`): partially.** Glyphs stay 8px at high
+detail (no 2048 crush). One Gemini 2.5 Flash call (below) counted 1000 rows and
+named rent as top category, then invented `total_expense=59999.99` (gold 75572.82,
+~21% low). So the layout is OCR-able enough to *see structure and large rent
+rows*, not OCR-able enough to sum 942 expenses. Tile savings ≠ reports accuracy.
 
-**2-tile compact (512×1024, ~5px): unlikely for sums.** Legible to a determined
-human with zoom; VLMs usually fail at 4–6px condensed type, especially 6 columns.
+**2-tile compact (512×1024, ~5–6px): unlikely for sums.** Cheapest fair packing
+(425). Legible to a human with zoom; VLMs usually fail at this density.
 
-**1-tile micro (~4px, 10 columns): no.**
+**1-tile micro (~4px, 10 columns, 255 tokens): no.** Density stunt.
 
-Two-column full ledgers were tried on paper: 500 rows × 8px = 4000px height,
-which exceeds 2048 and gets crushed. **Minimum columns for native 8px on a
-4-tile canvas is 4.** That is why the fair packing is a 4-column grid, not a
-2-column book page.
+Two-column full ledgers do not fit: 500 rows × 8px = 4000px height, which exceeds
+2048 and gets crushed. **Minimum columns for native 8px on a 4-tile canvas is 4.**
 
 ## Gateway vision probe (one image, ≤$1, no retries)
 
-- model: `google/gemini-2.5-flash`
-- image: `/workspace/experiments/tokenization/results/images/extra_4col_1bit.png`
-- high-detail tokens (formula): 765
+- model: `google/gemini-2.5-flash` (vision-capable, cheap)
+- image: `/workspace/experiments/tokenization/results/images/extra_4col_1bit.png` (`img_4col_1bit`, 512×2048 1-bit, 4-col named)
+- OpenAI high-detail formula: 765 tokens
+- gateway billed prompt_tokens=3531 completion_tokens=48 cost=$0.0011793
+  (Gemini's tokenizer is not the 85+170×tiles formula; do not mix them.)
 - ok: True
 - error: none
 - parsed: `{"n_transactions": 1000, "top_category": "rent", "total_expense": 59999.99}`
 - gold: n=1000, total_expense=75572.82, top=rent
-- match: {'n_transactions': True, 'total_expense': False, 'top_category': True, 'all': False}
-- usage: `{"completion_tokens": 48, "completion_tokens_details": {"audio_tokens": 0, "image_tokens": 0, "reasoning_tokens": 0}, "cost": 0.0011793, "cost_details": {"upstream_inference_completions_cost": 0.00012, "upstream_inference_cost": 0.0011793, "upstream_inference_prompt_cost": 0.0010593}, "is_byok": false, "prompt_tokens": 3531, "prompt_tokens_details": {"audio_tokens": 0, "cache_write_tokens": 0, "cached_tokens": 0, "video_tokens": 0}, "total_tokens": 3579}`
+- match: n=True expense=False top=True all=False
 
 ```
 ```json
@@ -134,7 +135,7 @@ which exceeds 2048 and gets crushed. **Minimum columns for native 8px on a
 ```
 ```
 
-The cheap vision model recovered n / total_expense / top category from the fair 4-col image. That is **not** proof it can do optimize + forecasts on all 1000 rows, but it is evidence the layout is OCR-able for reports-scale questions.
+Partial read: the model got **n=1000** and **top=rent**, then failed the expense sum (`59999.99` vs `75572.82`). A 1000-line native 8px grid is OCR-able enough to count rows and spot rent, **not** accurate enough to replace compact JSON for reports arithmetic. Caveat: the prompt mentioned the number 1000 while telling the model not to guess it — treat the n=1000 hit as weaker evidence than top=rent. No retries (budget rule).
 
 ## Under 425 high-detail tokens (fair codecs)
 

@@ -194,3 +194,111 @@ def cat_inverted(bundle: Bundle) -> str:
         )
         lines.append(f"{codes[cat]} {blob}")
     return "\n".join(lines)
+
+
+def _round2(value: float) -> float:
+    return round(value, 2)
+
+
+def _income_by_category(bundle: Bundle) -> dict[str, float]:
+    totals: dict[str, float] = defaultdict(float)
+    for tx in bundle.transactions:
+        if tx.value > 0:
+            totals[tx.category or "-"] += tx.value
+    return {name: _round2(total) for name, total in sorted(totals.items())}
+
+
+@fn_codec(
+    "tool_copy",
+    "tools",
+    "Minified copy-paste of the three task JSON blobs. Copy reports/optimize/forecasts as written; do not re-sum.",
+    reversible=False,
+)
+def tool_copy(bundle: Bundle) -> str:
+    gold = compute_gold(bundle)
+    payload = {
+        "reports": {
+            "n_transactions": gold["reports"]["n_transactions"],
+            "n_income": gold["reports"]["n_income"],
+            "n_expense": gold["reports"]["n_expense"],
+            "total_income": gold["reports"]["total_income"],
+            "total_expense": gold["reports"]["total_expense"],
+            "net": gold["reports"]["net"],
+            "top_category_by_spend": gold["reports"]["top_category_by_spend"],
+            "top_category_spend": gold["reports"]["top_category_spend"],
+        },
+        "optimize": {
+            "best_single_cut": gold["optimize"]["best_single_cut"],
+            "discretionary_share": gold["optimize"]["discretionary_share"],
+            "subscription_annual_cost": gold["optimize"]["subscription_annual_cost"],
+        },
+        "forecasts": {
+            "avg_monthly_spend_last3": gold["forecasts"]["avg_monthly_spend_last3"],
+            "avg_monthly_income_last3": gold["forecasts"]["avg_monthly_income_last3"],
+            "next_month_spend_naive": gold["forecasts"]["next_month_spend_naive"],
+            "next_month_income_naive": gold["forecasts"]["next_month_income_naive"],
+            "next_month_net_naive": gold["forecasts"]["next_month_net_naive"],
+            "last3_months": gold["forecasts"]["last3_months"],
+        },
+    }
+    return json.dumps(payload, separators=(",", ":"))
+
+
+@fn_codec(
+    "tool_rollup",
+    "tools",
+    "Tool GROUP-BYs only. total_expense=sum(spend_by_category); total_income=sum(income_by_category); net=income-expense; top=argmax(spend_by_category); discretionary_share=sum(discretionary_spend) as MONEY not percent; best_single_cut=argmax(discretionary_spend); subscription_annual_cost=sum(-value*12) for negative subs; last3 naive forecast=mean of last3_spend / last3_income. Do not use months outside last3.",
+    reversible=False,
+)
+def tool_rollup(bundle: Bundle) -> str:
+    gold = compute_gold(bundle)
+    reports = gold["reports"]
+    last3 = gold["forecasts"]["last3_months"]
+    spend = reports["by_category_spend"]
+    payload = {
+        "n": reports["n_transactions"],
+        "n_income": reports["n_income"],
+        "n_expense": reports["n_expense"],
+        "spend_by_category": spend,
+        "income_by_category": _income_by_category(bundle),
+        "last3_spend": {month: reports["by_month_spend"][month] for month in last3},
+        "last3_income": {month: reports["by_month_income"][month] for month in last3},
+        "discretionary_spend": {
+            name: spend[name] for name in sorted(DISCRETIONARY) if name in spend
+        },
+        "subscriptions": [
+            {"name": sub.name, "value": sub.value, "cron": sub.cron_stamp}
+            for sub in bundle.subscriptions
+        ],
+    }
+    return json.dumps(payload, separators=(",", ":"))
+
+
+def reconstruct_from_rollup(payload: dict) -> dict:
+    """Local check that tool_rollup numbers reconstruct gold task fields."""
+    spend = payload["spend_by_category"]
+    income = payload["income_by_category"]
+    disc = payload["discretionary_spend"]
+    last3_spend = list(payload["last3_spend"].values())
+    last3_income = list(payload["last3_income"].values())
+    total_income = _round2(sum(income.values()))
+    total_expense = _round2(sum(spend.values()))
+    avg_spend = _round2(sum(last3_spend) / len(last3_spend))
+    avg_income = _round2(sum(last3_income) / len(last3_income))
+    best = max(disc.items(), key=lambda kv: kv[1])
+    sub_annual = _round2(
+        sum(-row["value"] * 12 for row in payload["subscriptions"] if row["value"] is not None and row["value"] < 0)
+    )
+    return {
+        "n_transactions": payload["n"],
+        "total_income": total_income,
+        "total_expense": total_expense,
+        "net": _round2(total_income - total_expense),
+        "top_category_by_spend": max(spend.items(), key=lambda kv: kv[1])[0],
+        "discretionary_share": _round2(sum(disc.values())),
+        "best_single_cut": best[0],
+        "subscription_annual_cost": sub_annual,
+        "next_month_spend_naive": avg_spend,
+        "next_month_income_naive": avg_income,
+        "next_month_net_naive": _round2(avg_income - avg_spend),
+    }
