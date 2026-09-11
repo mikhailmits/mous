@@ -1,6 +1,6 @@
 # mous
 
-A tiny macOS popup for tracking your spending. Type one line, hit Return, done.
+A tiny box where finances are spinning
 
 ![Typing a spending line into mous and watching the totals update](docs/demo.gif)
 
@@ -26,8 +26,7 @@ xattr -cr /Applications/Mous.app && open /Applications/Mous.app
 
 ## What it is
 
-mous is a small always-at-hand window with exactly one input field. You write
-what happened, it does the math:
+mous is a tiny window where you quickly see all your spendings and things you may optimize. In mous you have only two components - the dashboard where you see all finances analysis and the input bar where you note your finances to the app
 
 ```
 -4.50 coffee with dave      → spent €4.50
@@ -36,36 +35,21 @@ what happened, it does the math:
 -24uah taxi                 → spent 24 hryvnia (any currency you add)
 ```
 
-The dashboard above the field always shows the numbers that matter: what you
-spent today, what's left, what the month cost you, and how much of your income
-you kept.
-
 ![The mous popup: spent today, money left, month total and saved percent](docs/main.png)
 
-## Two peeks under the hood
+## Oh.. Cool things btw
 
-Hold **⌘** and the popup shows its two shortcuts.
-
-**⌘M — History.** The month's ledger, newest first, labeled by day:
+You've got two shortcuts - cmd + m and cmd + x, first one shows the monthly money operations and the second one shows your most expensive spendings throughout the month, so don't forget to pay attention to those!
 
 ![History tip listing this month's transactions grouped by day](docs/history.png)
 
-**⌘X — Most expensive.** Where the money actually went, biggest first. If you
-tag transactions with categories it ranks the categories; otherwise it ranks
-the individual purchases:
-
 ![Most expensive tip ranking categories by spend](docs/expensive.png)
 
-## How it's put together
+## For those who are interested - architecture
 
-Two parts, both on your machine — nothing leaves your computer:
+A web server listens on a port and exposes an API with all the functionality: listing transactions, creating them, managing accounts, currencies, categories, and so on. The client — the macOS app — talks to that API, and that's how the figures end up on a simple page.
 
-- **The popup** — a native Swift app (`macos/Mous`). Borderless, floats above
-  everything, appears when you activate it and gets out of the way when you
-  don't.
-- **The API** — a small FastAPI + SQLite backend (`src/mous`) that stores
-  accounts, transactions, currencies and categories. The app talks to it on
-  `127.0.0.1:8000` and refuses to talk to anything else.
+The server is FastAPI with SQLite (`src/mous`) on `127.0.0.1:8000`. The client is a native Swift app (`macos/Mous`): a borderless popup that asks the API for data and renders it. The app does not store the books itself; it only talks to this local server.
 
 ## Run it
 
@@ -87,10 +71,9 @@ Or without Docker, run the API directly:
 uv run mous serve
 ```
 
-## Poking the API directly
+## Accessing the API directly
 
-Everything the app does goes through plain HTTP — so you can too. Interactive
-docs live at `http://127.0.0.1:8000/docs` once the API is up.
+The app uses a local HTTP API at `http://127.0.0.1:8000`. Once the server is running, interactive docs are at `http://127.0.0.1:8000/docs`.
 
 ```sh
 # add a category and a tagged expense
@@ -111,7 +94,3 @@ uv run mous serve                                        # API on :8000
 swift run --package-path macos/Mous MousCoreCheck        # swift checks
 swift build --package-path macos/Mous --product Mous     # build the app
 ```
-
-Screenshots in this README are the real app driven by its demo hook:
-`MOUS_DEMO_TYPE="-6.20 ramen with mia" ./Mous` types a line for real, and
-`MOUS_DEMO_TIP=history|expensive ./Mous` opens a tip once loaded.
