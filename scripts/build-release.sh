@@ -12,7 +12,7 @@ CONTENTS="$APP/Contents"
 MACOS="$CONTENTS/MacOS"
 RESOURCES="$CONTENTS/Resources"
 SWIFT_BIN="$ROOT/macos/Mous/.build/release/Mous"
-API_BIN="$DIST/mous-api"
+API_DIR="$DIST/mous-api"
 DEVELOPER_DIR_DEFAULT="/Library/Developer/CommandLineTools"
 
 if [[ -z "${DEVELOPER_DIR:-}" && -d "$DEVELOPER_DIR_DEFAULT" && ! -d /Applications/Xcode.app/Contents/Developer ]]; then
@@ -29,7 +29,7 @@ uv sync --frozen --group release
 uv run pyinstaller \
   --noconfirm \
   --clean \
-  --onefile \
+  --onedir \
   --name mous-api \
   --distpath "$DIST" \
   --workpath "$DIST/pyinstaller-work" \
@@ -46,17 +46,20 @@ uv run pyinstaller \
   "$ROOT/scripts/mous_api_entry.py"
 
 test -x "$SWIFT_BIN"
-test -x "$API_BIN"
+test -x "$API_DIR/mous-api"
 test -f "$ROOT/macos/Mous/Icon/AppIcon.icns"
 
 echo "==> Assemble $APP"
 rm -rf "$APP"
 mkdir -p "$MACOS" "$RESOURCES/migrations"
 cp "$SWIFT_BIN" "$MACOS/Mous"
-cp "$API_BIN" "$MACOS/mous-api"
-chmod +x "$MACOS/Mous" "$MACOS/mous-api"
+rm -rf "$MACOS/mous-api"
+cp -R "$API_DIR" "$MACOS/mous-api"
+chmod +x "$MACOS/Mous" "$MACOS/mous-api/mous-api"
 cp "$ROOT/macos/Mous/Sources/Mous/Info.plist" "$CONTENTS/Info.plist"
 cp "$ROOT/macos/Mous/Icon/AppIcon.icns" "$RESOURCES/AppIcon.icns"
+cp "$ROOT/macos/Mous/Icon"/logo-variant.png "$RESOURCES/"
+cp "$ROOT/macos/Mous/Icon"/logo-variant-*.png "$RESOURCES/"
 cp "$ROOT/migrations/"*.py "$RESOURCES/migrations/"
 cp "$ROOT/oxyde_config.py" "$RESOURCES/oxyde_config.py"
 

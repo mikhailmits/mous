@@ -95,4 +95,11 @@ app = create_app()
 def run(host: str = "127.0.0.1", port: int = 8000) -> None:
     import uvicorn
 
-    uvicorn.run("mous.api.app:app", host=host, port=port, reload=False)
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        reload=False,
+        access_log=False,
+        log_level="warning",
+    )

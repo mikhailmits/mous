@@ -60,7 +60,7 @@ Stop if either fails.
 
 Expect:
 
-- `dist/Mous.app` — UI at `Contents/MacOS/Mous`, helper at `Contents/MacOS/mous-api`
+- `dist/Mous.app` — UI at `Contents/MacOS/Mous`, helper at `Contents/MacOS/mous-api/mous-api`
 - `dist/Mous-<version>.dmg`
 
 The script ad-hoc signs. Developer ID + notarize only if the user has an
@@ -101,7 +101,8 @@ the user asked for.
 ```
 Mous.app/
   Contents/MacOS/Mous          # Swift popup
-  Contents/MacOS/mous-api      # frozen FastAPI
+  Contents/MacOS/mous-api/mous-api   # frozen FastAPI (onedir)
+  Contents/MacOS/mous-api/_internal/
   Contents/Resources/AppIcon.icns
   Contents/Resources/migrations/
   Contents/Resources/oxyde_config.py

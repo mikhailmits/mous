@@ -19,29 +19,36 @@ struct MousPopup: View {
     static let shadowMargin: CGFloat = 32
 
     var body: some View {
-        VStack(spacing: 8) {
-            DashboardCard(
-                snapshot: store.snapshot,
-                hasLoaded: store.hasLoadedDashboard,
-                isRefreshing: store.isRefreshing,
-                statusMessage: store.statusMessage,
-                onSpendHover: { inside in
-                    guard store.hasLoadedDashboard else { return }
-                    onSpendHover(inside)
-                },
-                onSavedHover: { inside in
-                    guard store.hasLoadedDashboard else { return }
-                    onSavedHover(inside)
-                },
-                showCommandHints: commandHints.visible
-            )
-            EntryCard(
-                store: store,
-                commitTick: store.commitTick,
-                rejectTick: store.rejectTick
-            )
+        Group {
+            if store.showLaunchSplash {
+                LaunchSplash()
+            } else {
+                VStack(spacing: 8) {
+                    DashboardCard(
+                        snapshot: store.snapshot,
+                        hasLoaded: store.hasLoadedDashboard,
+                        isRefreshing: store.isRefreshing,
+                        statusMessage: store.statusMessage,
+                        onSpendHover: { inside in
+                            guard store.hasLoadedDashboard else { return }
+                            onSpendHover(inside)
+                        },
+                        onSavedHover: { inside in
+                            guard store.hasLoadedDashboard else { return }
+                            onSavedHover(inside)
+                        },
+                        showCommandHints: commandHints.visible
+                    )
+                    EntryCard(
+                        store: store,
+                        commitTick: store.commitTick,
+                        rejectTick: store.rejectTick
+                    )
+                }
+            }
         }
         .frame(width: Self.cardWidth)
+        .animation(reduceMotion ? .easeOut(duration: 0.15) : .easeOut(duration: 0.22), value: store.showLaunchSplash)
         .padding(Self.shadowMargin)
         .contentShape(Rectangle())
         .onHover { onAppHover($0) }

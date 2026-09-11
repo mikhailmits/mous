@@ -10,6 +10,7 @@ struct MousCoreCheck {
         loopbackChecks()
         civilDateChecks()
         spendRankChecks()
+        await storeChecks()
         await apiClientChecks()
         if Check.failures > 0 {
             fputs("\(Check.failures) failure(s)\n", stderr)

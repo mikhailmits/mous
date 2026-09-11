@@ -10,19 +10,36 @@ final class LocalBackend {
     private var process: Process?
     private var stdout: FileHandle?
     private var stderr: FileHandle?
+    private var startTask: Task<Void, Never>?
 
     private init() {}
 
     var isBundled: Bool { Self.apiBinaryURL() != nil }
 
+    /// Spawn the helper immediately so boot overlaps window setup.
+    func kickoff() {
+        guard isBundled else { return }
+        if startTask == nil {
+            startTask = Task { await self.runStart() }
+        }
+    }
+
     func start() async {
+        kickoff()
+        await startTask?.value
+    }
+
+    private func runStart() async {
         if await Self.healthOK() { return }
         guard let binary = Self.apiBinaryURL() else { return }
-        spawn(binary)
-        for attempt in 1...12 {
+        if process?.isRunning != true {
+            spawn(binary)
+        }
+        for attempt in 1...ConnectRetry.bootAttempts {
+            if Task.isCancelled { return }
             if await Self.healthOK() { return }
             do {
-                try await ConnectRetry.sleep(attempt: min(attempt, 5))
+                try await ConnectRetry.sleepForBoot(attempt: attempt)
             } catch {
                 return
             }
@@ -30,6 +47,8 @@ final class LocalBackend {
     }
 
     func stop() {
+        startTask?.cancel()
+        startTask = nil
         guard let process else { return }
         if process.isRunning {
             process.terminate()
@@ -57,7 +76,9 @@ final class LocalBackend {
 
         let process = Process()
         process.executableURL = binary
+        process.currentDirectoryURL = binary.deletingLastPathComponent()
         process.environment = Self.childEnvironment()
+        process.standardInput = FileHandle.nullDevice
         process.standardOutput = stdout
         process.standardError = stderr
         process.terminationHandler = { [weak self] _ in
@@ -81,9 +102,13 @@ final class LocalBackend {
     private static func apiBinaryURL() -> URL? {
         let bundle = Bundle.main
         guard bundle.bundlePath.hasSuffix(".app") else { return nil }
-        let url = bundle.bundleURL
-            .appendingPathComponent("Contents/MacOS/mous-api", isDirectory: false)
-        return FileManager.default.isExecutableFile(atPath: url.path) ? url : nil
+        let macos = bundle.bundleURL.appendingPathComponent("Contents/MacOS", isDirectory: true)
+        let onedir = macos.appendingPathComponent("mous-api/mous-api", isDirectory: false)
+        if FileManager.default.isExecutableFile(atPath: onedir.path) {
+            return onedir
+        }
+        let onefile = macos.appendingPathComponent("mous-api", isDirectory: false)
+        return FileManager.default.isExecutableFile(atPath: onefile.path) ? onefile : nil
     }
 
     private static func supportDirectory() -> URL {
@@ -107,13 +132,24 @@ final class LocalBackend {
         return env
     }
 
+    private static let healthSession: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 0.2
+        config.timeoutIntervalForResource = 0.2
+        config.waitsForConnectivity = false
+        config.httpShouldSetCookies = false
+        config.httpCookieAcceptPolicy = .never
+        config.httpCookieStorage = nil
+        config.urlCache = nil
+        return URLSession(configuration: config)
+    }()
+
     private static func healthOK() async -> Bool {
         let url = URL(string: "http://127.0.0.1:8000/health")!
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 1
+        var request = URLRequest(url: url, timeoutInterval: 0.2)
         request.httpShouldHandleCookies = false
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (_, response) = try await healthSession.data(for: request)
             return (response as? HTTPURLResponse)?.statusCode == 200
         } catch {
             return false

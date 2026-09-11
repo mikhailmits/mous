@@ -39,6 +39,7 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { [weak self] event in
             self?.handleLocalEvent(event) ?? event
         }
+        observeLaunchSplash()
     }
 
     deinit {
@@ -80,10 +81,27 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
 
     func hide() {
         guard Date() >= suppressHideUntil else { return }
+        // Stay up while the launch spin is playing so `mous dev` from a
+        // terminal still shows the animation after the shell takes focus back.
+        if store.showLaunchSplash { return }
         dismissTipImmediately()
         hideCommandHints()
         window?.orderOut(nil)
         window?.collectionBehavior.remove(.moveToActiveSpace)
+    }
+
+    private func observeLaunchSplash() {
+        withObservationTracking {
+            _ = store.showLaunchSplash
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.observeLaunchSplash()
+                if !self.store.showLaunchSplash, !NSApp.isActive {
+                    self.hide()
+                }
+            }
+        }
     }
 
     func quitApp() {

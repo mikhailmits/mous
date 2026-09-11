@@ -54,6 +54,17 @@ public final class AppStore {
 
     public var fieldDisabled: Bool { isSubmitting }
 
+    /// Blank logo-spin until the API has answered once. Unreachable retries
+    /// stay on the splash; a real server error falls through to the cards.
+    public var showLaunchSplash: Bool {
+        guard !hasLoadedDashboard else { return false }
+        if isRefreshing { return true }
+        if let statusMessage {
+            return statusMessage == APIError.transport.userMessage
+        }
+        return true
+    }
+
     public func appear() async {
         await refresh(firstLoad: !hasLoadedDashboard)
     }
@@ -204,7 +215,11 @@ public final class AppStore {
                 statusMessage = error.userMessage
                 attempt += 1
                 do {
-                    try await ConnectRetry.sleep(attempt: attempt)
+                    if firstLoad {
+                        try await ConnectRetry.sleepForBoot(attempt: attempt)
+                    } else {
+                        try await ConnectRetry.sleep(attempt: attempt)
+                    }
                 } catch {
                     return
                 }
@@ -220,7 +235,11 @@ public final class AppStore {
                 statusMessage = APIError.transport.userMessage
                 attempt += 1
                 do {
-                    try await ConnectRetry.sleep(attempt: attempt)
+                    if firstLoad {
+                        try await ConnectRetry.sleepForBoot(attempt: attempt)
+                    } else {
+                        try await ConnectRetry.sleep(attempt: attempt)
+                    }
                 } catch {
                     return
                 }

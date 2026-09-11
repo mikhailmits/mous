@@ -227,6 +227,9 @@ func loopbackChecks() {
     Check.accuracy(ConnectRetry.delay(attempt: 1), 0.4)
     Check.accuracy(ConnectRetry.delay(attempt: 2), 0.8)
     Check.accuracy(ConnectRetry.delay(attempt: 5), ConnectRetry.maxDelay)
+    Check.accuracy(ConnectRetry.bootDelay(attempt: 1), ConnectRetry.bootPoll)
+    Check.accuracy(ConnectRetry.bootDelay(attempt: ConnectRetry.bootAttempts), ConnectRetry.bootPoll)
+    Check.accuracy(ConnectRetry.bootDelay(attempt: ConnectRetry.bootAttempts + 1), 0.4)
 }
 
 func civilDateChecks() {
@@ -321,4 +324,11 @@ func spendRankChecks() {
     Check.equal(mixedDays.map(\.title), ["yesterday big", "today cheap"])
     Check.equal(mixedDays[0].civilDate, CivilDate(year: 2026, month: 9, day: 7))
     Check.equal(mixedDays[1].civilDate, day)
+}
+
+@MainActor
+func storeChecks() {
+    let store = AppStore()
+    Check.true(store.showLaunchSplash, "fresh store shows launch splash")
+    Check.equal(store.hasLoadedDashboard, false)
 }
