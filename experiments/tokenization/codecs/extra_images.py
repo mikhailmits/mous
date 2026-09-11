@@ -378,6 +378,12 @@ def _render_text_grid(
             x += 4
         clipped = _fit_text(draw, line, font, col_w - 2)
         draw.text((x + 1, y), clipped, fill=ink, font=font)
+    capacity = n_cols * rows
+    if len(lines) > capacity:
+        raise RuntimeError(
+            f"{path.name} overflow: {len(lines)} lines > {n_cols} cols × {rows} rows "
+            f"(line_h={line_h}, {width}x{height})"
+        )
     img.save(path, optimize=True)
     return img.size[0], img.size[1], line_h
 
@@ -414,6 +420,11 @@ def _render_bitmap_grid(
         x = col * col_w + 1
         y = y0 + row * line_h
         _stamp_bitmap(img, x, y, line[:max_chars])
+    capacity = n_cols * rows
+    if len(lines) > capacity:
+        raise RuntimeError(
+            f"{path.name} overflow: {len(lines)} lines > {n_cols} cols × {rows} rows"
+        )
     img.save(path, optimize=True)
     return img.size[0], img.size[1], line_h
 
@@ -935,23 +946,20 @@ def _monthly_lines(bundle: Bundle) -> list[str]:
 def img_monthly_table(bundle: Bundle) -> CodecResult:
     lines = _monthly_lines(bundle)
     path = IMAGES / "extra_monthly_table.png"
-    # Large glyphs, one column, still 1 tile as long as both sides ≤ 512.
-    font = _mono_font(14)
+    # Stay inside one 512 tile (255 high / 85 low). Two columns if 1-col overflows.
+    font = _mono_font(13)
     dummy = Image.new("L", (1, 1), 255)
     draw = ImageDraw.Draw(dummy)
-    max_w = 0
-    for line in lines:
-        tw, th = _text_size(draw, line, font)
-        max_w = max(max_w, tw)
-        line_h = th + 3
-    width = min(512, max(320, max_w + 16))
-    height = min(512, max(200, line_h * len(lines) + 8))
+    _, th = _text_size(draw, "Ag", font)
+    line_h = th + 4
+    n_cols = 1 if line_h * len(lines) + 8 <= 512 else 2
+    width, height = 512, 512
     w, h, lh = _render_text_grid(
         lines,
         path,
         width=width,
         height=height,
-        n_cols=1,
+        n_cols=n_cols,
         font=font,
         mode="RGB",
         header="",
@@ -964,8 +972,8 @@ def img_monthly_table(bundle: Bundle) -> CodecResult:
         [(w, h)],
         line_h=lh,
         mode="RGB",
-        n_cols=1,
-        layout="single-column monthly+category table, ≤512×512 → 1 tile",
+        n_cols=n_cols,
+        layout=f"{n_cols}-col monthly+category table, 512×512 → 1 tile",
         decode=(
             "Transcribe the table. Reports: use n / sum_inc / sum_exp / the category list "
             "(top spend = max category). Optimize: rows tagged D are discretionary; pick the "

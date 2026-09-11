@@ -88,6 +88,7 @@ Emit exactly:
 {"reports":{"n_transactions":int,"n_income":int,"n_expense":int,"total_income":n,"total_expense":n,"net":n,"top_category_by_spend":str,"top_category_spend":n}}
 
 Rules:
+- If a header says n=1000 (or txs=1000), that is n_transactions.
 - Scan every amount. Do not sample, skip months, or round to thousands.
 - Keep money to 2 decimals (cent precision). 3243.94 stays 3243.94.
 - n_income = count of +amounts; n_expense = count of -amounts.

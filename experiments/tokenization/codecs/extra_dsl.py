@@ -158,7 +158,7 @@ def dsl_month_ids(bundle: Bundle) -> CodecResult:
     name_cat = _name_cat(bundle)
     nid = {name: i for i, name in enumerate(names)}
     legend = [
-        "V=cents/100 D=day N=id. Yxx then MM. default a=m ccy=e. k=credit w=savings $=usd",
+        f"n={len(bundle.transactions)} V=cents/100 D=day N=id. Yxx then MM. default a=m ccy=e. k=credit w=savings $=usd",
         _legend_cats(),
         "N " + " ".join(f"{i}={name}/{CAT_CODE.get(name_cat[name], '?')}" for i, name in enumerate(names)),
         _sub_line(bundle, as_cents=True),
@@ -169,7 +169,7 @@ def dsl_month_ids(bundle: Bundle) -> CodecResult:
 
     parts = legend + _year_then_month_rows(_months(bundle.transactions), row)
     decode = (
-        "Monthly ledger. Y25 then MM headers. Rows: DD name_id cents [k|w] [$]. "
+        "Monthly ledger. n= is the transaction count. Y25 then MM headers. Rows: DD name_id cents [k|w] [$]. "
         "N legend is id=merchant/category_code. Dollars=cents/100. SUB already in rows; "
         "annual sub cost = sum(-v*12) for SUB values < 0 (cents/100)."
     )
@@ -194,7 +194,7 @@ def dsl_cron(bundle: Bundle) -> CodecResult:
     n_months = len(month_keys)
     covered: set[int] = set()
     cron_lines = [
-        f"RANGE {month_keys[0][2:]}..{month_keys[-1][2:]} n={n_months} default a=m ccy=e V=cents",
+        f"RANGE {month_keys[0][2:]}..{month_keys[-1][2:]} months={n_months} txs={len(bundle.transactions)} default a=m ccy=e V=cents",
         _legend_cats(),
         _sub_line(bundle, as_cents=True),
     ]
@@ -239,7 +239,8 @@ def dsl_cron(bundle: Bundle) -> CodecResult:
         )
     )
     decode = (
-        "CRON expands once per month in RANGE: day d, cents v (or per-month value list). "
+        "CRON expands once per month in RANGE (months=N): day d, cents v (or per-month value list). "
+        "txs= is the transaction count (CRON expansions + X). "
         "X rows are extra txs: DD name cents cat_code [k|w] [$]. "
         "Dollars=cents/100. *Do not* count CRON rows twice — they are not in X. "
         "SUB metadata for annual cost only (already expanded into CRON)."
@@ -264,18 +265,19 @@ def dsl_cat_idx(bundle: Bundle) -> CodecResult:
     by_cat: dict[str, list[float]] = defaultdict(list)
     for tx in bundle.transactions:
         by_cat[tx.category or "uncategorized"].append(tx.value)
+    def income_first(cat: str) -> tuple:
+        return (0 if sum(by_cat[cat]) > 0 else 1, cat)
+
     lines = [
-        "+income -expense. *k = amount repeats k times. Count *k as k txs.",
+        f"n={len(bundle.transactions)} +income -expense. *k = amount repeats k times.",
         _sub_line(bundle),
     ]
-    for cat in sorted(by_cat):
+    for cat in sorted(by_cat, key=income_first):
         lines.append(f"{cat}: {_rle(by_cat[cat], sep=', ')}")
     decode = (
-        "Category inverted index. After each category name, signed dollar amounts. "
-        "a*k means amount a appears k times. Dates/names omitted. "
-        "total_expense = -sum of negatives; top spend category = largest -sum. "
-        "SUB already included in the lists; annual = sum(-v*12) for SUB v<0. "
-        "No month keys — do not use this encoding for forecasts."
+        "n= tx count. Category then signed dollars. a*k = k copies. Income cats first. "
+        "Spend=-sum of negatives. SUB metadata only; annual=sum(-v*12) for SUB v<0. "
+        "No dates — not for forecasts."
     )
     return _pack(
         "dsl_cat_idx",
@@ -297,21 +299,22 @@ def dsl_cat_month(bundle: Bundle) -> CodecResult:
     nested: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
     for tx in bundle.transactions:
         nested[tx.category or "uncategorized"][tx.occurred_on[:7]].append(tx.value)
+    def income_first(cat: str) -> tuple:
+        total = sum(v for month_vals in nested[cat].values() for v in month_vals)
+        return (0 if total > 0 else 1, cat)
+
     lines = [
-        "+income -expense. YY-MM then amounts. *k = repeat. Count every amount.",
+        f"n={len(bundle.transactions)} +income -expense. YY-MM then amounts. *k = repeat.",
         _sub_line(bundle),
     ]
-    for cat in sorted(nested):
+    for cat in sorted(nested, key=income_first):
         lines.append(f"{cat}:")
         for month, vals in nested[cat].items():
             lines.append(f"{month[2:]} {_rle(vals)}")
     decode = (
-        "Category-major ledger. Heading = category. Lines = YY-MM then signed dollars. "
-        "*k repeats. n_transactions = count of amounts (*k counts as k). "
-        "Spend of a category = -sum of its negatives. "
-        "Month spend/income = sum across categories in that YY-MM. "
-        "Last 3 month keys in calendar order. "
-        "SUB is metadata (rows already listed); annual sub cost = sum(-v*12) for SUB v<0."
+        "n= tx count. Category headings (income first); YY-MM then signed dollars; *k repeats. "
+        "Spend=-sum of negatives. Month totals=sum that YY-MM. Last 3 months → naive forecast. "
+        "SUB metadata only; annual=sum(-v*12) for SUB v<0."
     )
     return _pack(
         "dsl_cat_month",
@@ -330,7 +333,7 @@ def dsl_cat_month(bundle: Bundle) -> CodecResult:
 )
 def dsl_yc1(bundle: Bundle) -> CodecResult:
     legend = [
-        "V=cents/100. Yxx then MM. Rows: DD name cents cat [k|w] [$]",
+        f"n={len(bundle.transactions)} V=cents/100. Yxx then MM. Rows: DD name cents cat [k|w] [$]",
         "default a=m ccy=e. k=credit w=savings $=usd",
         _legend_cats(),
         _sub_line(bundle, as_cents=True),
@@ -342,7 +345,7 @@ def dsl_yc1(bundle: Bundle) -> CodecResult:
 
     parts = legend + _year_then_month_rows(_months(bundle.transactions), row)
     decode = (
-        "Monthly spaced ledger. Y25 then MM. Row: day name cents cat_code [account/ccy if not m/e]. "
+        "Monthly spaced ledger. n= is the transaction count. Y25 then MM. Row: day name cents cat_code [account/ccy if not m/e]. "
         "Dollars=cents/100. C legend maps 1-char category. SUB already in rows; "
         "annual = sum(-v*12) for SUB v<0 (convert cents)."
     )

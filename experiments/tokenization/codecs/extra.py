@@ -11,3 +11,5 @@ from experiments.tokenization.codecs import extra_spaces as _extra_spaces  # noq
 from experiments.tokenization.codecs import extra_dsl as _extra_dsl  # noqa: F401
 from experiments.tokenization.codecs import extra_images as _extra_images  # noqa: F401
 from experiments.tokenization.codecs import extra_compress as _extra_compress  # noqa: F401
+from experiments.tokenization.codecs import extra_lang as _extra_lang  # noqa: F401
+from experiments.tokenization.codecs import extra_tick as _extra_tick  # noqa: F401
