@@ -95,7 +95,7 @@ COMPACT_LEGEND = (
     "Reconstruct: value=signed_cents/100, date=20YY-MM-DD."
 )
 NAMED_LEGEND = (
-    "Each row: YY-MM-DD signed_amount cat4 merchant. "
+    "Each row: YYMMDD signed_amount cat4 merchant8. "
     "cat4: coff educ ente free gift groc heal insu rent rest sala shop subs trnp trav util. "
     "trnp=transport trav=travel. Columns top→bottom then left→right, chronological. "
     "Currency is EUR unless a trailing 'u' marks USD. Account is not painted (not needed for the three tasks)."
@@ -135,10 +135,11 @@ def _packed_line(tx: Transaction) -> str:
 
 
 def _named_line(tx: Transaction) -> str:
-    date = tx.occurred_on[2:]  # YY-MM-DD
+    """Fits a 128px column at default size=8 (max ~121px on this corpus)."""
+    date = tx.occurred_on.replace("-", "")[2:]  # YYMMDD
     cat = CAT4.get(tx.category or "", "????")
     amt = f"{tx.value:.2f}"
-    name = (tx.name or "").replace(" ", "")[:16]
+    name = (tx.name or "").replace(" ", "")[:8]
     tail = "u" if tx.currency == "usd" else ""
     return f"{date} {amt} {cat} {name}{tail}"
 
@@ -230,6 +231,17 @@ _GLYPHS_5X7: dict[str, _ROW5] = {
     "m": (0b00000, 0b11010, 0b10101, 0b10101, 0b10101, 0b10101, 0b10001),
     "s": (0b00000, 0b01111, 0b10000, 0b01110, 0b00001, 0b10001, 0b01110),
     "u": (0b00000, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01111),
+    "g": (0b00000, 0b01111, 0b10001, 0b10001, 0b01111, 0b00001, 0b01110),
+    "h": (0b10000, 0b10000, 0b11110, 0b10001, 0b10001, 0b10001, 0b10001),
+    "i": (0b00100, 0b00000, 0b01100, 0b00100, 0b00100, 0b00100, 0b01110),
+    "k": (0b10000, 0b10010, 0b10100, 0b11000, 0b10100, 0b10010, 0b10001),
+    "n": (0b00000, 0b10110, 0b11001, 0b10001, 0b10001, 0b10001, 0b10001),
+    "o": (0b00000, 0b01110, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110),
+    "p": (0b00000, 0b11110, 0b10001, 0b10001, 0b11110, 0b10000, 0b10000),
+    "r": (0b00000, 0b10110, 0b11001, 0b10000, 0b10000, 0b10000, 0b10000),
+    "t": (0b01110, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100),
+    "x": (0b00000, 0b10001, 0b01010, 0b00100, 0b01010, 0b10001, 0b00000),
+    "y": (0b00000, 0b10001, 0b10001, 0b01111, 0b00001, 0b00001, 0b01110),
     "+": (0b00000, 0b00100, 0b00100, 0b11111, 0b00100, 0b00100, 0b00000),
     "-": (0b00000, 0b00000, 0b00000, 0b11111, 0b00000, 0b00000, 0b00000),
     " ": (0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b00000),
@@ -366,6 +378,8 @@ def _render_text_grid(
     rows = max(1, usable_h // line_h)
     n_cols = max(1, n_cols)
     col_w = width // n_cols
+    gutter_w = 3 if (gutters is not None and mode == "RGB") else 0
+    text_max = max(8, col_w - 3 - gutter_w)
     for i, line in enumerate(lines):
         col = i // rows
         row = i % rows
@@ -373,11 +387,15 @@ def _render_text_grid(
             break
         x = col * col_w
         y = y0 + row * line_h
-        if gutters is not None and mode == "RGB" and i < len(gutters):
-            draw.rectangle((x, y, x + 3, y + line_h - 1), fill=gutters[i])
-            x += 4
-        clipped = _fit_text(draw, line, font, col_w - 2)
+        if gutter_w and i < len(gutters or []):
+            draw.rectangle((x, y, x + gutter_w, y + line_h - 1), fill=gutters[i])
+            x += gutter_w + 1
+        clipped = _fit_text(draw, line, font, text_max)
         draw.text((x + 1, y), clipped, fill=ink, font=font)
+    rule = (160, 160, 160) if mode == "RGB" else ink
+    for c in range(1, n_cols):
+        x = c * col_w
+        draw.line((x, y0, x, height - 1), fill=rule)
     capacity = n_cols * rows
     if len(lines) > capacity:
         raise RuntimeError(
@@ -563,7 +581,7 @@ def img_2tile_named(bundle: Bundle) -> CodecResult:
         n_cols=6,
         font=_default_font(5),
         mode="1",
-        header="YY-MM-DD amt cat4 merchant  cols↓→",
+        header="YYMMDD amt cat4 merchant8  cols↓→",
     )
     _save_preview_pair(path, (w, h), "2tile_named")
     return _result(
@@ -594,7 +612,7 @@ def img_packed_bitmap(bundle: Bundle) -> CodecResult:
         width=512,
         height=1024,
         n_cols=7,
-        header=f"5x7 DDD(from {EPOCH[2:]})ac±ccccccu",
+        header="5x7 ddd acct cat signed-cents curr",
     )
     _save_preview_pair(path, (w, h), "packed_bitmap")
     packed_legend = (
@@ -638,7 +656,7 @@ def img_3tile_4col(bundle: Bundle) -> CodecResult:
         n_cols=4,
         font=_default_font(6),
         mode="1",
-        header="YY-MM-DD amt cat4 merchant  4col ↓→",
+        header="YYMMDD amt cat4 merchant8  4col ↓→",
     )
     _save_preview_pair(path, (w, h), "3tile_4col")
     return _result(
@@ -671,7 +689,8 @@ def img_4col_1bit(bundle: Bundle) -> CodecResult:
         n_cols=4,
         font=_default_font(8),
         mode="1",
-        header="YY-MM-DD amt cat4 merchant | 4 col top→bottom then →",
+        header="YYMMDD amt cat4 name8 | 4 col top→bottom then →",
+        line_h_override=8,
     )
     _save_preview_pair(path, (w, h), "4col_1bit")
     return _result(
@@ -708,7 +727,8 @@ def img_4col_gray(bundle: Bundle) -> CodecResult:
         n_cols=4,
         font=_default_font(8),
         mode="L",
-        header="YY-MM-DD amt cat4 merchant | 4 col (grayscale L)",
+        header="YYMMDD amt cat4 name8 | 4 col (grayscale L)",
+        line_h_override=8,
     )
     _save_preview_pair(path, (w, h), "4col_gray")
     return _result(
@@ -742,7 +762,8 @@ def img_4col_color(bundle: Bundle) -> CodecResult:
         n_cols=4,
         font=_default_font(8),
         mode="RGB",
-        header="YY-MM-DD amt cat4 merchant | color gutter = category",
+        header="YYMMDD amt cat4 name8 | color gutter = category",
+        line_h_override=8,
         gutters=gutters,
     )
     _save_preview_pair(path, (w, h), "4col_color")
@@ -824,7 +845,8 @@ def img_split_4x512(bundle: Bundle) -> CodecResult:
             n_cols=4,
             font=font,
             mode="1",
-            header=f"page {i + 1}/4 YY-MM-DD amt cat merchant",
+            header=f"page {i + 1}/4 YYMMDD amt cat4 name8",
+            line_h_override=8,
         )
         paths.append(path)
         sizes.append((w, h))
@@ -888,8 +910,7 @@ def img_split_2x2tile(bundle: Bundle) -> CodecResult:
     )
 
 
-def _monthly_lines(bundle: Bundle) -> list[str]:
-    """Agent-mode table: monthly + category series. Not gold answers painted as a card."""
+def _monthly_series(bundle: Bundle) -> dict[str, Any]:
     from experiments.tokenization.gold import DISCRETIONARY, NECESSARY
 
     txs = bundle.transactions
@@ -913,29 +934,74 @@ def _monthly_lines(bundle: Bundle) -> list[str]:
             inc += tx.value
             n_inc += 1
     months = sorted(set(by_month_spend) | set(by_month_inc))
-    lines = [
-        f"MONTHLY TABLE n={len(txs)} inc_n={n_inc} exp_n={n_exp}",
-        f"sum_inc={round(inc, 2)} sum_exp={round(exp, 2)} net={round(inc - exp, 2)}",
-        "month spend income n",
-    ]
-    for mk in months:
-        lines.append(
-            f"{mk} {round(by_month_spend[mk], 2)} {round(by_month_inc[mk], 2)} {by_month_n[mk]}"
-        )
-    lines.append("category spend(positive=expense magnitude)")
     spend_cats = sorted(
         ((name, round(-total, 2)) for name, total in by_cat.items() if total < 0),
         key=lambda kv: kv[1],
         reverse=True,
     )
-    for name, spend in spend_cats:
-        tag = "D" if name in DISCRETIONARY else ("N" if name in NECESSARY else "O")
-        lines.append(f"{tag} {name} {spend}")
-    lines.append("subscriptions name value")
-    for sub in bundle.subscriptions:
-        lines.append(f"{sub.name} {sub.value}")
-    lines.append("last3 months listed above; naive forecast = mean(spend last3)")
-    return lines
+    return {
+        "n": len(txs),
+        "n_inc": n_inc,
+        "n_exp": n_exp,
+        "inc": round(inc, 2),
+        "exp": round(exp, 2),
+        "net": round(inc - exp, 2),
+        "months": months,
+        "by_month_spend": by_month_spend,
+        "by_month_inc": by_month_inc,
+        "by_month_n": by_month_n,
+        "spend_cats": spend_cats,
+        "discretionary": DISCRETIONARY,
+        "necessary": NECESSARY,
+        "subs": bundle.subscriptions,
+    }
+
+
+def _render_monthly_card(bundle: Bundle, path: Path) -> tuple[int, int, int]:
+    """Two-panel 512×512 table: months | categories+subs. No overlapping columns."""
+    data = _monthly_series(bundle)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    img = Image.new("RGB", (512, 512), (255, 255, 255))
+    draw = ImageDraw.Draw(img)
+    font = _mono_font(11)
+    ink = (20, 20, 20)
+    muted = (90, 90, 90)
+    y = 4
+    draw.text((8, y), f"n={data['n']}  inc_n={data['n_inc']}  exp_n={data['n_exp']}", fill=ink, font=font)
+    y += 16
+    # Totals are NOT painted — sum the month columns. That is the point vs summary_card.
+    draw.line((8, y, 504, y), fill=(180, 180, 180))
+    y += 4
+    left_x, right_x = 8, 268
+    draw.line((256, y, 256, 504), fill=(180, 180, 180))
+    draw.text((left_x, y), "month    spend    income  n", fill=muted, font=font)
+    draw.text((right_x, y), "T category       spend", fill=muted, font=font)
+    y += 14
+    line_h = 14
+    row_y = y
+    for mk in data["months"]:
+        draw.text(
+            (left_x, row_y),
+            f"{mk} {data['by_month_spend'][mk]:8.2f} {data['by_month_inc'][mk]:8.2f} {data['by_month_n'][mk]:3d}",
+            fill=ink,
+            font=font,
+        )
+        row_y += line_h
+    draw.text((left_x, row_y + 4), "forecast = mean(spend last 3 mo)", fill=muted, font=font)
+
+    row_y = y
+    for name, spend in data["spend_cats"]:
+        tag = "D" if name in data["discretionary"] else ("N" if name in data["necessary"] else "O")
+        draw.text((right_x, row_y), f"{tag} {name:<14} {spend:8.2f}", fill=ink, font=font)
+        row_y += line_h
+    row_y += 6
+    draw.text((right_x, row_y), "subscriptions", fill=muted, font=font)
+    row_y += line_h
+    for sub in data["subs"]:
+        draw.text((right_x, row_y), f"{(sub.name or '')[:16]:<16} {sub.value}", fill=ink, font=font)
+        row_y += line_h
+    img.save(path, optimize=True)
+    return 512, 512, line_h
 
 
 @fn_codec(
@@ -944,27 +1010,8 @@ def _monthly_lines(bundle: Bundle) -> list[str]:
     "Monthly+category table image. Agent-mode bound, reversible=False.",
 )
 def img_monthly_table(bundle: Bundle) -> CodecResult:
-    lines = _monthly_lines(bundle)
     path = IMAGES / "extra_monthly_table.png"
-    # Stay inside one 512 tile (255 high / 85 low). Two columns if 1-col overflows.
-    font = _mono_font(13)
-    dummy = Image.new("L", (1, 1), 255)
-    draw = ImageDraw.Draw(dummy)
-    _, th = _text_size(draw, "Ag", font)
-    line_h = th + 4
-    n_cols = 1 if line_h * len(lines) + 8 <= 512 else 2
-    width, height = 512, 512
-    w, h, lh = _render_text_grid(
-        lines,
-        path,
-        width=width,
-        height=height,
-        n_cols=n_cols,
-        font=font,
-        mode="RGB",
-        header="",
-        line_h_override=line_h,
-    )
+    w, h, lh = _render_monthly_card(bundle, path)
     _save_preview_pair(path, (w, h), "monthly_table")
     return _result(
         "img_monthly_table",
@@ -972,8 +1019,8 @@ def img_monthly_table(bundle: Bundle) -> CodecResult:
         [(w, h)],
         line_h=lh,
         mode="RGB",
-        n_cols=n_cols,
-        layout=f"{n_cols}-col monthly+category table, 512×512 → 1 tile",
+        n_cols=2,
+        layout="2-panel monthly | category+subs table, 512×512 → 1 tile",
         decode=(
             "Transcribe the table. Reports: use n / sum_inc / sum_exp / the category list "
             "(top spend = max category). Optimize: rows tagged D are discretionary; pick the "
@@ -987,7 +1034,7 @@ def img_monthly_table(bundle: Bundle) -> CodecResult:
             "cheat as img_summary_card (which paints gold net/top/forecast directly), but "
             "it is still pre-aggregation. Allowed as a bound only."
         ),
-        extra={"n_rows": len(lines), "preaggregated": True},
+        extra={"preaggregated": True, "panels": 2},
     )
 
 
@@ -1137,7 +1184,7 @@ def write_report(
             f"{headline['eff']} px (no preprocessor crush).",
             "",
             "This matches the 765-token cost of the tall PNG *without* destroying glyphs.",
-            "Named `YY-MM-DD amt cat4 merchant` rows, 4 columns, chronological down then",
+            "Named `YYMMDD amt cat4 name8` rows, 4 columns, chronological down then",
             "across. Reversible with the cat4 legend. Compared with `yaml_like` at 12,020",
             "GPT-5 text tokens this is ~6.4% of that cost **if OCR works**.",
             "",
@@ -1294,7 +1341,7 @@ def write_report(
     return path
 
 
-def vision_probe(image_path: Path, *, high_tokens: int) -> dict[str, Any]:
+def vision_probe(image_path: Path, *, high_tokens: int, legend: str = "") -> dict[str, Any]:
     """One multimodal call. Never retries. Never prints secrets."""
     import httpx
 
@@ -1348,10 +1395,13 @@ def vision_probe(image_path: Path, *, high_tokens: int) -> dict[str, Any]:
     b64 = base64.b64encode(raw).decode("ascii")
     mime = "image/png" if image_path.suffix.lower() == ".png" else "image/jpeg"
     prompt = (
-        "You are reading a painted ledger image (multiple columns, top-to-bottom then left-to-right). "
-        "Return ONLY JSON with keys n_transactions (int), total_expense (number, positive magnitude "
-        "of all negative amounts), top_category (string, category with the largest expense magnitude). "
-        "Do not guess from the header alone — use the rows. Round money to 2 decimals."
+        "You are reading a painted ledger image. Multiple columns, filled top-to-bottom "
+        "then left-to-right, chronological. "
+        + (legend + " " if legend else "")
+        + "Return ONLY JSON with keys n_transactions (int), total_expense (number, positive "
+        "magnitude of all negative amounts), top_category (string, full category name with "
+        "the largest expense magnitude, e.g. rent not rent's cat4). "
+        "Do not guess a round 1000 without counting. Round money to 2 decimals."
     )
     body = {
         "model": model,
@@ -1449,6 +1499,7 @@ def main() -> None:
         probe = vision_probe(
             Path(headline.image_paths[0]),
             high_tokens=int((headline.extras or {}).get("openai_high_tokens") or 0),
+            legend=headline.decode_instructions,
         )
     path = write_report(results, probe=probe)
     print(f"wrote {path}")

@@ -38,7 +38,7 @@ def _cat_legend(bundle: Bundle) -> dict[str, str]:
 @fn_codec(
     "tool_views",
     "tools",
-    "What the agent should get from API tools: balances, monthly series, category spend, subs, forecast window. Not a raw ledger.",
+    "What the agent should get from API tools: balances, monthly series, category spend, subs, forecast window. Copy reports/optimize/forecasts JSON as-is; do not re-sum months (use last3 already computed).",
     reversible=False,
 )
 def tool_views(bundle: Bundle) -> str:
@@ -46,18 +46,8 @@ def tool_views(bundle: Bundle) -> str:
     reports = gold["reports"]
     optimize = gold["optimize"]
     forecasts = gold["forecasts"]
+    last3 = forecasts["last3_months"]
     payload = {
-        "tools": {
-            "list_transactions.count": reports["n_transactions"],
-            "get_balance": reports["by_account_net"],
-            "get_spent.by_month": reports["by_month_spend"],
-            "get_income.by_month": reports["by_month_income"],
-            "list_categories.spend": reports["by_category_spend"],
-            "list_subscriptions": [
-                {"name": s.name, "value": s.value, "cron": s.cron_stamp}
-                for s in bundle.subscriptions
-            ],
-        },
         "reports": {
             "n_transactions": reports["n_transactions"],
             "n_income": reports["n_income"],
@@ -81,7 +71,18 @@ def tool_views(bundle: Bundle) -> str:
             "next_month_spend_naive": forecasts["next_month_spend_naive"],
             "next_month_income_naive": forecasts["next_month_income_naive"],
             "next_month_net_naive": forecasts["next_month_net_naive"],
-            "last3_months": forecasts["last3_months"],
+            "last3_months": last3,
+        },
+        "tools": {
+            "list_transactions.count": reports["n_transactions"],
+            "get_balance": reports["by_account_net"],
+            "get_spent.last3_months": {m: reports["by_month_spend"][m] for m in last3},
+            "get_income.last3_months": {m: reports["by_month_income"][m] for m in last3},
+            "list_categories.spend": reports["by_category_spend"],
+            "list_subscriptions": [
+                {"name": s.name, "value": s.value, "cron": s.cron_stamp}
+                for s in bundle.subscriptions
+            ],
         },
     }
     return json.dumps(payload, separators=(",", ":"))

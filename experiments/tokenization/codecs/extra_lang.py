@@ -11,13 +11,10 @@ back to rent/shopping/… without outside knowledge.
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date
 
 from experiments.tokenization.bundle import Bundle, Transaction
 from experiments.tokenization.codecs.base import fn_codec
-from experiments.tokenization.codecs.languages import CAT_AR, CAT_DE, CAT_JA, CAT_RU, CAT_ZH
-
-EPOCH = date(2025, 1, 1)
+from experiments.tokenization.codecs.languages import CAT_DE, CAT_JA, CAT_RU, CAT_ZH
 
 # ---------------------------------------------------------------------------
 # Full dictionaries: every merchant + category + account
@@ -135,6 +132,9 @@ NAME_RU = {
     "weekly groceries": "закупка",
     "zara": "Зара",
 }
+
+# Compact monthly rows cannot embed spaces inside names.
+NAME_RU_GLUE = {key: val.replace(" ", "") for key, val in NAME_RU.items()}
 
 NAME_ZH = {
     "airbnb weekend": "民宿",
@@ -462,14 +462,14 @@ NAME_IDEO = {
 
 ACC_IDEO = {"main": "主", "savings": "储", "credit": "贷"}
 
-# One Hangul syllable per label (common syllables; 1 token on o200k).
+# One Hangul syllable per label. Only syllables that are 1 token on o200k.
 CAT_KO_IDEO = {
     "rent": "월",
     "groceries": "식",
     "restaurants": "외",
     "transport": "차",
     "salary": "급",
-    "freelance": "겸",
+    "freelance": "업",
     "subscriptions": "구",
     "entertainment": "락",
     "healthcare": "의",
@@ -486,62 +486,8 @@ NAME_KO_IDEO = {
     "airbnb weekend": "숙",
     "aldi": "알",
     "amazon order": "아",
-    "apartment rent": "셋",
-    "bakery coffee": "빵",
-    "bio company": "생",
-    "birthday gift": "생",  # field-local; disambiguated in legend as 생일
-    "books": "책",
-    "bolt ride": "볼",
-    "burger joint": "버",
-    "bvg ticket": "티",
-    "cinema": "영",
-    "concert": "공",
-    "consulting fee": "컨",
-    "dentist": "치",
-    "design invoice": "디",
-    "electricity": "전",
-    "espresso": "에",
-    "flat white": "플",
-    "flixbus": "플",  # will uniquify below
-    "flowers": "꽃",
-    "fuel": "기",
-    "github pro": "깃",
-    "gp visit": "진",
-    "gym": "헬",
-    "health insurance": "건",
-    "icloud+": "클",
-    "ikea": "이",
-    "internet": "넷",
-    "language class": "어",
-    "lidl": "리",
-    "lufthansa": "루",
-    "media markt": "매",
-    "monthly salary": "봉",
-    "museum": "박",
-    "netflix": "넷",
-    "online course": "강",
-    "pharmacy": "약",
-    "ramen bar": "면",
-    "rewe": "레",
-    "spotify": "스",
-    "steam game": "팀",
-    "sushi place": "초",
-    "trattoria roma": "식",
-    "uber ride": "우",
-    "water bill": "수",
-    "wedding gift": "혼",
-    "weekend gig": "부",
-    "weekly groceries": "장",
-    "zara": "자",
-}
-
-# Unique Hangul name glyphs — collisions above are fixed here.
-NAME_KO_IDEO = {
-    "airbnb weekend": "숙",
-    "aldi": "알",
-    "amazon order": "아",
-    "apartment rent": "셋",
-    "bakery coffee": "빵",
+    "apartment rent": "집",
+    "bakery coffee": "밀",
     "bio company": "바",
     "birthday gift": "생",
     "books": "책",
@@ -555,14 +501,14 @@ NAME_KO_IDEO = {
     "design invoice": "디",
     "electricity": "전",
     "espresso": "에",
-    "flat white": "흰",
+    "flat white": "라",
     "flixbus": "플",
     "flowers": "꽃",
-    "fuel": "기름",  # 2 chars if 기 collides; prefer 1-char 주
-    "github pro": "깃",
+    "fuel": "주",
+    "github pro": "코",
     "gp visit": "진",
-    "gym": "헬",
-    "health insurance": "보",
+    "gym": "근",
+    "health insurance": "건",
     "icloud+": "클",
     "ikea": "케",
     "internet": "웹",
@@ -577,10 +523,10 @@ NAME_KO_IDEO = {
     "pharmacy": "약",
     "ramen bar": "면",
     "rewe": "레",
-    "spotify": "팟",
+    "spotify": "포",
     "steam game": "팀",
     "sushi place": "초",
-    "trattoria roma": "롬",
+    "trattoria roma": "태",
     "uber ride": "우",
     "water bill": "물",
     "wedding gift": "혼",
@@ -588,15 +534,12 @@ NAME_KO_IDEO = {
     "weekly groceries": "장",
     "zara": "자",
 }
-NAME_KO_IDEO["fuel"] = "주"
 
-ACC_KO_IDEO = {"main": "주", "savings": "저", "credit": "카"}
-# main 주 collides with fuel 주 — accounts are a different field; OK.
-# But 주 as account default is omitted anyway.
+ACC_KO_IDEO = {"main": "메", "savings": "저", "credit": "카"}
 
-# Japanese 1-kanji merchants / cats
+# Japanese 1-char labels, restricted to 1-token o200k glyphs.
 CAT_JA_IDEO = {
-    "rent": "賃",
+    "rent": "租",
     "groceries": "食",
     "restaurants": "飯",
     "transport": "乗",
@@ -608,7 +551,7 @@ CAT_JA_IDEO = {
     "utilities": "光",
     "shopping": "買",
     "travel": "旅",
-    "coffee": "珈",
+    "coffee": "咖",
     "insurance": "険",
     "education": "学",
     "gifts": "祝",
@@ -617,47 +560,47 @@ CAT_JA_IDEO = {
 NAME_JA_IDEO = {
     "airbnb weekend": "泊",
     "aldi": "阿",
-    "amazon order": "亜",
+    "amazon order": "亚",
     "apartment rent": "屋",
-    "bakery coffee": "パン",
+    "bakery coffee": "パ",
     "bio company": "生",
-    "birthday gift": "誕",
+    "birthday gift": "庆",
     "books": "本",
     "bolt ride": "迅",
     "burger joint": "肉",
     "bvg ticket": "券",
     "cinema": "映",
     "concert": "演",
-    "consulting fee": "顧",
-    "dentist": "歯",
+    "consulting fee": "顾",
+    "dentist": "牙",
     "design invoice": "設",
     "electricity": "電",
-    "espresso": "濃",
+    "espresso": "浓",
     "flat white": "白",
-    "flixbus": "バス",
+    "flixbus": "バ",
     "flowers": "花",
     "fuel": "油",
     "github pro": "符",
     "gp visit": "診",
     "gym": "体",
     "health insurance": "健",
-    "icloud+": "雲",
-    "ikea": "家具",
+    "icloud+": "云",
+    "ikea": "イ",
     "internet": "網",
     "language class": "語",
     "lidl": "莉",
     "lufthansa": "空",
-    "media markt": "家電",
-    "monthly salary": "俸",
+    "media markt": "媒",
+    "monthly salary": "工",
     "museum": "博",
     "netflix": "ネ",
     "online course": "講",
     "pharmacy": "薬",
-    "ramen bar": "麺",
-    "rewe": "蕾",
+    "ramen bar": "面",
+    "rewe": "雷",
     "spotify": "音",
-    "steam game": "蒸",
-    "sushi place": "鮨",
+    "steam game": "汽",
+    "sushi place": "寿",
     "trattoria roma": "伊",
     "uber ride": "優",
     "water bill": "水",
@@ -667,16 +610,7 @@ NAME_JA_IDEO = {
     "zara": "ザ",
 }
 
-# Force 1-char Japanese names (katakana/kanji); multi-char ones get a single kata.
-NAME_JA_IDEO["bakery coffee"] = "パ"
-NAME_JA_IDEO["flixbus"] = "バ"
-NAME_JA_IDEO["ikea"] = "イ"
-NAME_JA_IDEO["media markt"] = "媒"
-NAME_JA_IDEO["netflix"] = "ネ"
-NAME_JA_IDEO["sushi place"] = "寿"
-NAME_JA_IDEO["zara"] = "ザ"
-
-ACC_JA_IDEO = {"main": "本", "savings": "貯", "credit": "卡"}
+ACC_JA_IDEO = {"main": "本", "savings": "储", "credit": "卡"}
 
 # First 80 Hangul syllables that are 1 token on o200k_base (measured).
 HANGUL_80 = (
@@ -685,7 +619,7 @@ HANGUL_80 = (
 )
 
 CJK_DIGIT_TABLE = str.maketrans("0123456789.-", "零一二三四五六七八九負點")
-HANGUL_DIGIT_TABLE = str.maketrans("0123456789.-", "영일이삼사오육칠팔구음쩜")
+HANGUL_DIGIT_TABLE = str.maketrans("0123456789.-", "영일이삼사오육칠팔구음점")
 
 assert len(NAME_IDEO) == 50, len(NAME_IDEO)
 assert len(set(NAME_IDEO.values())) == 50, set(k for k, v in NAME_IDEO.items() if list(NAME_IDEO.values()).count(v) > 1)
@@ -757,13 +691,14 @@ def _render_mapped(
     return legend + "\n" + "\n".join(lines)
 
 
-def _flags(tx: Transaction, accs: dict[str, str]) -> str:
-    """Omit default eur/main; emit 1-char flags otherwise."""
+def _flags(tx: Transaction, accs: dict[str, str] | None = None) -> str:
+    """Omit default eur/main; emit 1-char flags. Always CJK so Latin/Hangul cats stay parseable."""
     bits = ""
     if tx.currency != "eur":
         bits += "$"
     if tx.account != "main":
-        bits += accs.get(tx.account, tx.account[0])
+        table = accs or ACC_IDEO
+        bits += table.get(tx.account, ACC_IDEO[tx.account])
     return bits
 
 
@@ -781,7 +716,7 @@ def _compact_rows(
         for tx in bundle.transactions:
             d = tx.occurred_on.replace("-", "")[2:]
             rows.append(
-                f"{d}{names[tx.name]}{amount_fn(tx)}{cats[tx.category or '-']}{_flags(tx, accs)}"
+                f"{d}{names[tx.name]}{amount_fn(tx)}{cats[tx.category or '-']}{_flags(tx, ACC_IDEO)}"
             )
         return "\n".join(rows)
 
@@ -794,7 +729,7 @@ def _compact_rows(
         for tx in txs:
             dd = tx.occurred_on[8:]
             parts.append(
-                f"{dd}{names[tx.name]}{amount_fn(tx)}{cats[tx.category or '-']}{_flags(tx, accs)}"
+                f"{dd}{names[tx.name]}{amount_fn(tx)}{cats[tx.category or '-']}{_flags(tx, ACC_IDEO)}"
             )
     return "\n".join(parts)
 
@@ -945,14 +880,14 @@ def lang_mixed_en_cjkamt(bundle: Bundle) -> str:
 @fn_codec(
     "lang_hangul_digits",
     "languages",
-    "Hangul digits 영일이삼사오육칠팔구음쩜 for amounts; English names; 1-char Hangul cats.",
+    "Hangul digits 영일이삼사오육칠팔구음점 for amounts; English names; 1-char Hangul cats.",
 )
 def lang_hangul_digits(bundle: Bundle) -> str:
     legend = _full_legend(
         names={n: n for n in NAME_KO_IDEO},
         cats=CAT_KO_IDEO,
         accs=ACC_KO_IDEO,
-        extra="Hangul digits 영=0 일=1 … 구=9 음=- 쩜=.; English names; C=1 Hangul. Default A=main Y=eur.",
+        extra="Hangul digits 영=0 일=1 … 구=9 음=- 점=.; English names; C=1 Hangul. Default A=main Y=eur.",
     )
     lines = [
         f"{tx.occurred_on} {tx.name} {_hangul_digits_amount(tx)} {CAT_KO_IDEO[tx.category or '-']}"
@@ -987,15 +922,11 @@ def lang_hangul_pack(bundle: Bundle) -> str:
 # ---------------------------------------------------------------------------
 
 IDEO_RULES = (
-    "Finance ideographs. D=YYMMDD V=signed cents. Default Y=eur A=主. "
-    "Non-eur → trailing $ ; non-main → trailing 储/贷. "
-    "N/C/A map glyph→English gold."
+    "D=YYMMDD V=signed cents. Default Y=eur A=主. Non-eur→$ non-main→储/贷. N/C/A glyph→English gold."
 )
 
 IDEO_MONTHLY_RULES = (
-    "Finance ideographs, monthly groups. Header=YYMM. Row=DD N V C [flags]. "
-    "V=signed cents. Default Y=eur A=主. Non-eur → $ ; non-main → 储/贷. "
-    "N/C/A map glyph→English gold."
+    "Header=YYMM. Row=DD N V C [flags]. V=signed cents. Default eur/主. $=usd 储=savings 贷=credit. N/C/A glyph→English gold."
 )
 
 
@@ -1079,8 +1010,8 @@ def lang_ideo_monthly_hangulpack(bundle: Bundle) -> str:
 )
 def lang_ko_ideo_monthly(bundle: Bundle) -> str:
     extra = (
-        "Hangul finance syllables, monthly groups. Header=YYMM. Row=DD N V C [flags]. "
-        "V=signed cents. Default Y=eur A=주. N/C/A map syllable→English gold."
+        "Hangul 1-syllable labels. "
+        + IDEO_MONTHLY_RULES
     )
     legend = _full_legend(
         names=NAME_KO_IDEO, cats=CAT_KO_IDEO, accs=ACC_KO_IDEO, extra=extra
@@ -1098,8 +1029,8 @@ def lang_ko_ideo_monthly(bundle: Bundle) -> str:
 )
 def lang_ja_ideo_monthly(bundle: Bundle) -> str:
     extra = (
-        "Japanese 1-char labels, monthly groups. Header=YYMM. Row=DD N V C [flags]. "
-        "V=signed cents. Default Y=eur A=本. N/C/A map glyph→English gold."
+        "Japanese 1-char labels. "
+        + IDEO_MONTHLY_RULES
     )
     legend = _full_legend(
         names=NAME_JA_IDEO, cats=CAT_JA_IDEO, accs=ACC_JA_IDEO, extra=extra
@@ -1125,3 +1056,184 @@ def lang_zh_monthly(bundle: Bundle) -> str:
         bundle, NAME_ZH, CAT_ZH, ACC_ZH, monthly=True, amount_fn=_ascii_cents
     )
     return legend + "\n" + body
+
+
+WORD_MONTHLY_RULES = (
+    "Header=YYMM. Row=DDnameVcat[flags] with V=signed cents. "
+    "Default eur/主. $=usd 储=savings 贷=credit. N/C/A map labels→English gold."
+)
+
+
+@fn_codec(
+    "lang_de_monthly",
+    "languages",
+    "Full German words on the compact monthly+cents layout. Shows translation+packing, not labels-only.",
+)
+def lang_de_monthly(bundle: Bundle) -> str:
+    legend = _full_legend(names=NAME_DE, cats=CAT_DE, accs=ACC_DE, extra="DE " + WORD_MONTHLY_RULES)
+    body = _compact_rows(
+        bundle, NAME_DE, CAT_DE, ACC_DE, monthly=True, amount_fn=_ascii_cents
+    )
+    return legend + "\n" + body
+
+
+@fn_codec(
+    "lang_ru_monthly",
+    "languages",
+    "Full Russian words on compact monthly+cents layout (spaces stripped from names).",
+)
+def lang_ru_monthly(bundle: Bundle) -> str:
+    legend = _full_legend(
+        names=NAME_RU_GLUE, cats=CAT_RU, accs=ACC_RU, extra="RU " + WORD_MONTHLY_RULES
+    )
+    body = _compact_rows(
+        bundle, NAME_RU_GLUE, CAT_RU, ACC_RU, monthly=True, amount_fn=_ascii_cents
+    )
+    return legend + "\n" + body
+
+
+@fn_codec(
+    "lang_ko_monthly",
+    "languages",
+    "Full Korean words on compact monthly+cents layout.",
+)
+def lang_ko_monthly(bundle: Bundle) -> str:
+    legend = _full_legend(names=NAME_KO, cats=CAT_KO, accs=ACC_KO, extra="KO " + WORD_MONTHLY_RULES)
+    body = _compact_rows(
+        bundle, NAME_KO, CAT_KO, ACC_KO, monthly=True, amount_fn=_ascii_cents
+    )
+    return legend + "\n" + body
+
+
+@fn_codec(
+    "lang_ja_monthly",
+    "languages",
+    "Full Japanese words on compact monthly+cents layout.",
+)
+def lang_ja_monthly(bundle: Bundle) -> str:
+    legend = _full_legend(names=NAME_JA, cats=CAT_JA, accs=ACC_JA, extra="JA " + WORD_MONTHLY_RULES)
+    body = _compact_rows(
+        bundle, NAME_JA, CAT_JA, ACC_JA, monthly=True, amount_fn=_ascii_cents
+    )
+    return legend + "\n" + body
+
+
+@fn_codec(
+    "lang_pinyin_monthly",
+    "languages",
+    "Pinyin words on compact monthly+cents layout. Latin script; some syllables collide with English.",
+)
+def lang_pinyin_monthly(bundle: Bundle) -> str:
+    legend = _full_legend(
+        names=NAME_PY, cats=CAT_PY, accs=ACC_PY, extra="Pinyin " + WORD_MONTHLY_RULES
+    )
+    body = _compact_rows(
+        bundle, NAME_PY, CAT_PY, ACC_PY, monthly=True, amount_fn=_ascii_cents
+    )
+    return legend + "\n" + body
+
+
+@fn_codec(
+    "lang_ideo_monthly_spaced",
+    "languages",
+    "Same as lang_ideo_monthly but spaces between fields for easier model parsing.",
+)
+def lang_ideo_monthly_spaced(bundle: Bundle) -> str:
+    legend = _full_legend(
+        names=NAME_IDEO,
+        cats=CAT_IDEO,
+        accs=ACC_IDEO,
+        extra="Spaced " + IDEO_MONTHLY_RULES,
+    )
+    grouped: dict[str, list[Transaction]] = defaultdict(list)
+    for tx in bundle.transactions:
+        grouped[tx.occurred_on[:7]].append(tx)
+    parts = [legend]
+    for month, txs in grouped.items():
+        parts.append(month[2:].replace("-", ""))
+        for tx in txs:
+            dd = tx.occurred_on[8:]
+            flags = _flags(tx, ACC_IDEO)
+            parts.append(
+                f"{dd} {NAME_IDEO[tx.name]} {_ascii_cents(tx)} {CAT_IDEO[tx.category or '-']}{flags}"
+            )
+    return "\n".join(parts)
+
+
+def decode_compact_monthly(
+    text: str,
+    names: dict[str, str],
+    cats: dict[str, str],
+    accs: dict[str, str] | None = None,
+) -> list[dict]:
+    """Invert compact monthly rows. Used to prove reversibility of the 1-char / glued codecs."""
+    name_from = {glyph: eng for eng, glyph in names.items()}
+    cat_from = {glyph: eng for eng, glyph in cats.items()}
+    acc_from = {glyph: eng for eng, glyph in (accs or ACC_IDEO).items()}
+    acc_from.update({glyph: eng for eng, glyph in ACC_IDEO.items()})
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines) and not (len(lines[i]) == 4 and lines[i].isdigit()):
+        i += 1
+    out: list[dict] = []
+    year_month = ""
+    while i < len(lines):
+        line = lines[i]
+        i += 1
+        if len(line) == 4 and line.isdigit():
+            year_month = f"20{line[:2]}-{line[2:]}"
+            continue
+        dd = line[:2]
+        j = 2
+        while j < len(line) and line[j] not in "-0123456789":
+            j += 1
+        name_g = line[2:j]
+        sign = 1
+        if j < len(line) and line[j] == "-":
+            sign = -1
+            j += 1
+        k = j
+        while k < len(line) and line[k].isdigit():
+            k += 1
+        cents = sign * int(line[j:k])
+        rest = line[k:]
+        currency = "eur"
+        account = "main"
+        while rest and rest[-1] in "$储贷":
+            flag = rest[-1]
+            rest = rest[:-1]
+            if flag == "$":
+                currency = "usd"
+            else:
+                account = acc_from.get(flag, flag)
+        cat_g = rest.strip()
+        out.append(
+            {
+                "occurred_on": f"{year_month}-{dd}",
+                "name": name_from.get(name_g, name_g),
+                "value": cents / 100.0,
+                "currency": currency,
+                "account": account,
+                "category": cat_from.get(cat_g, cat_g),
+            }
+        )
+    return out
+
+
+def roundtrip_compact_monthly(bundle: Bundle) -> bool:
+    """True if lang_ideo_monthly reconstructs date/name/cents/ccy/account/category."""
+    text = lang_ideo_monthly.encode(bundle).text  # type: ignore[attr-defined]
+    got = decode_compact_monthly(text, NAME_IDEO, CAT_IDEO, ACC_IDEO)
+    if len(got) != len(bundle.transactions):
+        return False
+    for tx, row in zip(bundle.transactions, got, strict=True):
+        if (
+            row["occurred_on"] != tx.occurred_on
+            or row["name"] != tx.name
+            or row["category"] != tx.category
+            or row["account"] != tx.account
+            or row["currency"] != tx.currency
+            or abs(row["value"] - tx.value) > 0.001
+        ):
+            return False
+    return True
