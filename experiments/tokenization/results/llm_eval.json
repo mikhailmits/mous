@@ -1,9 +1,353 @@
 {
-  "models": [
-    "qwen/qwen-2.5-7b-instruct"
-  ],
-  "rescored": true,
+  "rescored_from_raw": true,
   "results": [
+    {
+      "model": "google/gemini-2.5-flash",
+      "codec": "month_cat_sums",
+      "task": "forecasts",
+      "ok": true,
+      "accuracy": 0.0,
+      "passed": 0,
+      "total": 2,
+      "checks": {
+        "next_month_spend": {
+          "ok": false,
+          "rel_error": 0.0998,
+          "gold": 2888.14,
+          "pred": 2600.02
+        },
+        "next_month_income": {
+          "ok": false,
+          "rel_error": 69.3521,
+          "gold": 4581.06,
+          "pred": 322287.33
+        }
+      },
+      "usage": {
+        "prompt_tokens": 2459,
+        "completion_tokens": 102,
+        "total_tokens": 2561,
+        "cost": 0.0009927,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0009927,
+          "upstream_inference_prompt_cost": 0.0007377,
+          "upstream_inference_completions_cost": 0.000255
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "codec": "month_cat_sums",
+      "task": "optimize",
+      "ok": true,
+      "accuracy": 0.0,
+      "passed": 0,
+      "total": 2,
+      "checks": {
+        "discretionary_share": {
+          "ok": false,
+          "reason": "missing_pred",
+          "gold": {
+            "highest_discretionary": [
+              {
+                "category": "shopping",
+                "spend": 9175.33,
+                "cut_20pct_saves": 1835.07
+              },
+              {
+                "category": "travel",
+                "spend": 8309.94,
+                "cut_20pct_saves": 1661.99
+              },
+              {
+                "category": "restaurants",
+                "spend": 6242.68,
+                "cut_20pct_saves": 1248.54
+              },
+              {
+                "category": "entertainment",
+                "spend": 2755.51,
+                "cut_20pct_saves": 551.1
+              },
+              {
+                "category": "gifts",
+                "spend": 1191.67,
+                "cut_20pct_saves": 238.33
+              }
+            ],
+            "best_single_cut": {
+              "category": "shopping",
+              "spend": 9175.33,
+              "cut_20pct_saves": 1835.07
+            },
+            "subscription_annual_cost": 15926.16,
+            "necessary_share": 41400.64,
+            "discretionary_share": 28281.19,
+            "playbook": [
+              "Cut 20% of shopping to save 1835.07/period",
+              "Cut 20% of travel to save 1661.99/period",
+              "Cut 20% of restaurants to save 1248.54/period"
+            ]
+          }
+        },
+        "best_cut_category": {
+          "ok": false,
+          "reason": "missing_pred"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 2522,
+        "completion_tokens": 295,
+        "total_tokens": 2817,
+        "cost": 0.0014941,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0014941,
+          "upstream_inference_prompt_cost": 0.0007566,
+          "upstream_inference_completions_cost": 0.0007375
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "codec": "month_cat_sums",
+      "task": "reports",
+      "ok": true,
+      "accuracy": 0.2,
+      "passed": 1,
+      "total": 5,
+      "checks": {
+        "n_transactions": {
+          "ok": false,
+          "rel_error": 0.05,
+          "gold": 1000.0,
+          "pred": 950.0
+        },
+        "total_income": {
+          "ok": false,
+          "rel_error": 0.3376,
+          "gold": 90564.2,
+          "pred": 59990.0
+        },
+        "total_expense": {
+          "ok": false,
+          "rel_error": 0.3253,
+          "gold": 75572.82,
+          "pred": 50990.0
+        },
+        "net": {
+          "ok": false,
+          "rel_error": 0.3997,
+          "gold": 14991.38,
+          "pred": 9000.0
+        },
+        "top_category": {
+          "ok": true,
+          "gold": "rent",
+          "pred": "rent"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 2476,
+        "completion_tokens": 206,
+        "total_tokens": 2682,
+        "cost": 0.0012578,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0012578,
+          "upstream_inference_prompt_cost": 0.0007428,
+          "upstream_inference_completions_cost": 0.000515
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "codec": "tiny_ledger_vm",
+      "task": "forecasts",
+      "ok": true,
+      "accuracy": 0.0,
+      "passed": 0,
+      "total": 2,
+      "checks": {
+        "next_month_spend": {
+          "ok": false,
+          "rel_error": 0.3421,
+          "gold": 2888.14,
+          "pred": 1900.09
+        },
+        "next_month_income": {
+          "ok": false,
+          "rel_error": 69.495,
+          "gold": 4581.06,
+          "pred": 322941.67
+        }
+      },
+      "usage": {
+        "prompt_tokens": 8205,
+        "completion_tokens": 102,
+        "total_tokens": 8307,
+        "cost": 0.0027165,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0027165,
+          "upstream_inference_prompt_cost": 0.0024615,
+          "upstream_inference_completions_cost": 0.000255
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "codec": "tiny_ledger_vm",
+      "task": "optimize",
+      "ok": true,
+      "accuracy": 0.0,
+      "passed": 0,
+      "total": 2,
+      "checks": {
+        "discretionary_share": {
+          "ok": false,
+          "rel_error": 0.9646,
+          "gold": 28281.19,
+          "pred": 1000.0
+        },
+        "best_cut_category": {
+          "ok": false,
+          "gold": "shopping",
+          "pred": "restaurants"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 8268,
+        "completion_tokens": 157,
+        "total_tokens": 8425,
+        "cost": 0.0028729,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0028729,
+          "upstream_inference_prompt_cost": 0.0024804,
+          "upstream_inference_completions_cost": 0.0003925
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "codec": "tiny_ledger_vm",
+      "task": "reports",
+      "ok": true,
+      "accuracy": 0.2,
+      "passed": 1,
+      "total": 5,
+      "checks": {
+        "n_transactions": {
+          "ok": false,
+          "rel_error": 0.21,
+          "gold": 1000.0,
+          "pred": 790.0
+        },
+        "total_income": {
+          "ok": false,
+          "rel_error": 0.4589,
+          "gold": 90564.2,
+          "pred": 49000.0
+        },
+        "total_expense": {
+          "ok": false,
+          "rel_error": 0.7354,
+          "gold": 75572.82,
+          "pred": 20000.0
+        },
+        "net": {
+          "ok": false,
+          "rel_error": 0.9344,
+          "gold": 14991.38,
+          "pred": 29000.0
+        },
+        "top_category": {
+          "ok": true,
+          "gold": "rent",
+          "pred": "rent"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 8222,
+        "completion_tokens": 192,
+        "total_tokens": 8414,
+        "cost": 0.0029466,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0029466,
+          "upstream_inference_prompt_cost": 0.0024666,
+          "upstream_inference_completions_cost": 0.00048
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
     {
       "model": "qwen/qwen-2.5-7b-instruct",
       "codec": "aggregates_only",
@@ -160,6 +504,160 @@
     },
     {
       "model": "qwen/qwen-2.5-7b-instruct",
+      "codec": "cat_inverted",
+      "task": "forecasts",
+      "ok": true,
+      "accuracy": 0.0,
+      "passed": 0,
+      "total": 2,
+      "checks": {
+        "next_month_spend": {
+          "ok": false,
+          "rel_error": 3.1707,
+          "gold": 2888.14,
+          "pred": 12045.67
+        },
+        "next_month_income": {
+          "ok": false,
+          "rel_error": 69.8308,
+          "gold": 4581.06,
+          "pred": 324480.0
+        }
+      },
+      "usage": {
+        "prompt_tokens": 7102,
+        "completion_tokens": 108,
+        "total_tokens": 7210,
+        "cost": 0.0007318,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 195,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0007318,
+          "upstream_inference_prompt_cost": 0.0007102,
+          "upstream_inference_completions_cost": 2.16e-05
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "model": "qwen/qwen-2.5-7b-instruct",
+      "codec": "cat_inverted",
+      "task": "optimize",
+      "ok": true,
+      "accuracy": 0.0,
+      "passed": 0,
+      "total": 2,
+      "checks": {
+        "discretionary_share": {
+          "ok": false,
+          "rel_error": 0.0815,
+          "gold": 28281.19,
+          "pred": 25977.6
+        },
+        "best_cut_category": {
+          "ok": false,
+          "gold": "shopping",
+          "pred": "res"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 7164,
+        "completion_tokens": 100,
+        "total_tokens": 7264,
+        "cost": 0.0007364,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 257,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0007364,
+          "upstream_inference_prompt_cost": 0.0007164,
+          "upstream_inference_completions_cost": 2e-05
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "model": "qwen/qwen-2.5-7b-instruct",
+      "codec": "cat_inverted",
+      "task": "reports",
+      "ok": true,
+      "accuracy": 0.0,
+      "passed": 0,
+      "total": 5,
+      "checks": {
+        "n_transactions": {
+          "ok": false,
+          "rel_error": 0.76,
+          "gold": 1000.0,
+          "pred": 240.0
+        },
+        "total_income": {
+          "ok": false,
+          "rel_error": 3.6324,
+          "gold": 90564.2,
+          "pred": 419531.0
+        },
+        "total_expense": {
+          "ok": false,
+          "rel_error": 4.1429,
+          "gold": 75572.82,
+          "pred": 388667.0
+        },
+        "net": {
+          "ok": false,
+          "rel_error": 1.0588,
+          "gold": 14991.38,
+          "pred": 30864.0
+        },
+        "top_category": {
+          "ok": false,
+          "gold": "rent",
+          "pred": "ren"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 7117,
+        "completion_tokens": 233,
+        "total_tokens": 7350,
+        "cost": 0.0007583,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 210,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0007583,
+          "upstream_inference_prompt_cost": 0.0007117,
+          "upstream_inference_completions_cost": 4.66e-05
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "model": "qwen/qwen-2.5-7b-instruct",
       "codec": "dict_ids",
       "task": "forecasts",
       "ok": true,
@@ -304,6 +802,314 @@
           "upstream_inference_cost": 0.0019218,
           "upstream_inference_prompt_cost": 0.0018762,
           "upstream_inference_completions_cost": 4.56e-05
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "model": "qwen/qwen-2.5-7b-instruct",
+      "codec": "dsl_cat_month",
+      "task": "forecasts",
+      "ok": true,
+      "accuracy": 0.0,
+      "passed": 0,
+      "total": 2,
+      "checks": {
+        "next_month_spend": {
+          "ok": false,
+          "rel_error": 0.5864,
+          "gold": 2888.14,
+          "pred": 1194.67
+        },
+        "next_month_income": {
+          "ok": false,
+          "rel_error": 0.2904,
+          "gold": 4581.06,
+          "pred": 3250.88
+        }
+      },
+      "usage": {
+        "prompt_tokens": 8020,
+        "completion_tokens": 100,
+        "total_tokens": 8120,
+        "cost": 0.000822,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 196,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.000822,
+          "upstream_inference_prompt_cost": 0.000802,
+          "upstream_inference_completions_cost": 2e-05
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "model": "qwen/qwen-2.5-7b-instruct",
+      "codec": "dsl_cat_month",
+      "task": "optimize",
+      "ok": true,
+      "accuracy": 0.0,
+      "passed": 0,
+      "total": 2,
+      "checks": {
+        "discretionary_share": {
+          "ok": false,
+          "rel_error": 0.9449,
+          "gold": 28281.19,
+          "pred": 1559.36
+        },
+        "best_cut_category": {
+          "ok": false,
+          "gold": "shopping",
+          "pred": "restaurants"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 8082,
+        "completion_tokens": 105,
+        "total_tokens": 8187,
+        "cost": 0.0008292,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 6,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0008292,
+          "upstream_inference_prompt_cost": 0.0008082,
+          "upstream_inference_completions_cost": 2.1e-05
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "model": "qwen/qwen-2.5-7b-instruct",
+      "codec": "dsl_cat_month",
+      "task": "reports",
+      "ok": true,
+      "accuracy": 0.2,
+      "passed": 1,
+      "total": 5,
+      "checks": {
+        "n_transactions": {
+          "ok": false,
+          "rel_error": 0.88,
+          "gold": 1000.0,
+          "pred": 120.0
+        },
+        "total_income": {
+          "ok": false,
+          "rel_error": 0.5641,
+          "gold": 90564.2,
+          "pred": 39477.65
+        },
+        "total_expense": {
+          "ok": false,
+          "rel_error": 0.8431,
+          "gold": 75572.82,
+          "pred": 11857.87
+        },
+        "net": {
+          "ok": false,
+          "rel_error": 0.8424,
+          "gold": 14991.38,
+          "pred": 27619.78
+        },
+        "top_category": {
+          "ok": true,
+          "gold": "rent",
+          "pred": "rent"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 8035,
+        "completion_tokens": 221,
+        "total_tokens": 8256,
+        "cost": 0.0008477,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 211,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0008477,
+          "upstream_inference_prompt_cost": 0.0008035,
+          "upstream_inference_completions_cost": 4.42e-05
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "model": "qwen/qwen-2.5-7b-instruct",
+      "codec": "group_cat_name_daynum",
+      "task": "forecasts",
+      "ok": true,
+      "accuracy": 0.0,
+      "passed": 0,
+      "total": 2,
+      "checks": {
+        "next_month_spend": {
+          "ok": false,
+          "rel_error": 3.1361,
+          "gold": 2888.14,
+          "pred": 11945.67
+        },
+        "next_month_income": {
+          "ok": false,
+          "rel_error": 69.4815,
+          "gold": 4581.06,
+          "pred": 322880.0
+        }
+      },
+      "usage": {
+        "prompt_tokens": 9572,
+        "completion_tokens": 108,
+        "total_tokens": 9680,
+        "cost": 0.0009788,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 81,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0009788,
+          "upstream_inference_prompt_cost": 0.0009572,
+          "upstream_inference_completions_cost": 2.16e-05
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "model": "qwen/qwen-2.5-7b-instruct",
+      "codec": "group_cat_name_daynum",
+      "task": "optimize",
+      "ok": true,
+      "accuracy": 0.0,
+      "passed": 0,
+      "total": 2,
+      "checks": {
+        "discretionary_share": {
+          "ok": false,
+          "rel_error": 3.1331,
+          "gold": 28281.19,
+          "pred": 116889.0
+        },
+        "best_cut_category": {
+          "ok": false,
+          "gold": "shopping",
+          "pred": "travel"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 9634,
+        "completion_tokens": 152,
+        "total_tokens": 9786,
+        "cost": 0.0009938,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 81,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0009938,
+          "upstream_inference_prompt_cost": 0.0009634,
+          "upstream_inference_completions_cost": 3.04e-05
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "model": "qwen/qwen-2.5-7b-instruct",
+      "codec": "group_cat_name_daynum",
+      "task": "reports",
+      "ok": true,
+      "accuracy": 0.0,
+      "passed": 0,
+      "total": 5,
+      "checks": {
+        "n_transactions": {
+          "ok": false,
+          "rel_error": 0.872,
+          "gold": 1000.0,
+          "pred": 128.0
+        },
+        "total_income": {
+          "ok": false,
+          "rel_error": 2.9453,
+          "gold": 90564.2,
+          "pred": 357300.0
+        },
+        "total_expense": {
+          "ok": false,
+          "rel_error": 14.8743,
+          "gold": 75572.82,
+          "pred": 1199667.3
+        },
+        "net": {
+          "ok": false,
+          "rel_error": 57.1901,
+          "gold": 14991.38,
+          "pred": -842367.3
+        },
+        "top_category": {
+          "ok": false,
+          "gold": "rent",
+          "pred": "sushi place"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 9587,
+        "completion_tokens": 240,
+        "total_tokens": 9827,
+        "cost": 0.0010067,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 5,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0010067,
+          "upstream_inference_prompt_cost": 0.0009587,
+          "upstream_inference_completions_cost": 4.8e-05
         },
         "completion_tokens_details": {
           "reasoning_tokens": 0,
@@ -622,6 +1428,622 @@
     },
     {
       "model": "qwen/qwen-2.5-7b-instruct",
+      "codec": "month_cat_sums",
+      "task": "forecasts",
+      "ok": true,
+      "accuracy": 0.0,
+      "passed": 0,
+      "total": 2,
+      "checks": {
+        "next_month_spend": {
+          "ok": false,
+          "rel_error": 8.963,
+          "gold": 2888.14,
+          "pred": 28774.67
+        },
+        "next_month_income": {
+          "ok": false,
+          "rel_error": 68.7548,
+          "gold": 4581.06,
+          "pred": 319551.0
+        }
+      },
+      "usage": {
+        "prompt_tokens": 2450,
+        "completion_tokens": 108,
+        "total_tokens": 2558,
+        "cost": 0.0002666,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 195,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0002666,
+          "upstream_inference_prompt_cost": 0.000245,
+          "upstream_inference_completions_cost": 2.16e-05
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "model": "qwen/qwen-2.5-7b-instruct",
+      "codec": "month_cat_sums",
+      "task": "optimize",
+      "ok": true,
+      "accuracy": 0.0,
+      "passed": 0,
+      "total": 2,
+      "checks": {
+        "discretionary_share": {
+          "ok": false,
+          "rel_error": 7.6393,
+          "gold": 28281.19,
+          "pred": 244330.0
+        },
+        "best_cut_category": {
+          "ok": false,
+          "gold": "shopping",
+          "pred": "restaurants"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 2512,
+        "completion_tokens": 104,
+        "total_tokens": 2616,
+        "cost": 0.000272,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 257,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.000272,
+          "upstream_inference_prompt_cost": 0.0002512,
+          "upstream_inference_completions_cost": 2.08e-05
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "model": "qwen/qwen-2.5-7b-instruct",
+      "codec": "month_cat_sums",
+      "task": "reports",
+      "ok": true,
+      "accuracy": 0.0,
+      "passed": 0,
+      "total": 5,
+      "checks": {
+        "n_transactions": {
+          "ok": false,
+          "rel_error": 0.96,
+          "gold": 1000.0,
+          "pred": 40.0
+        },
+        "total_income": {
+          "ok": false,
+          "rel_error": 13.2833,
+          "gold": 90564.2,
+          "pred": 1293557.0
+        },
+        "total_expense": {
+          "ok": false,
+          "rel_error": 23.965,
+          "gold": 75572.82,
+          "pred": 1886673.0
+        },
+        "net": {
+          "ok": false,
+          "rel_error": 40.5638,
+          "gold": 14991.38,
+          "pred": -593116.0
+        },
+        "top_category": {
+          "ok": false,
+          "gold": "rent",
+          "pred": "travel"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 2465,
+        "completion_tokens": 240,
+        "total_tokens": 2705,
+        "cost": 0.0002945,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 210,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0002945,
+          "upstream_inference_prompt_cost": 0.0002465,
+          "upstream_inference_completions_cost": 4.8e-05
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "model": "qwen/qwen-2.5-7b-instruct",
+      "codec": "month_ids",
+      "task": "forecasts",
+      "ok": true,
+      "accuracy": 0.0,
+      "passed": 0,
+      "total": 2,
+      "checks": {
+        "next_month_spend": {
+          "ok": false,
+          "rel_error": 2.9741,
+          "gold": 2888.14,
+          "pred": 11477.67
+        },
+        "next_month_income": {
+          "ok": false,
+          "rel_error": 69.475,
+          "gold": 4581.06,
+          "pred": 322850.0
+        }
+      },
+      "usage": {
+        "prompt_tokens": 11843,
+        "completion_tokens": 108,
+        "total_tokens": 11951,
+        "cost": 0.0012059,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 195,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0012059,
+          "upstream_inference_prompt_cost": 0.0011843,
+          "upstream_inference_completions_cost": 2.16e-05
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "model": "qwen/qwen-2.5-7b-instruct",
+      "codec": "month_ids",
+      "task": "optimize",
+      "ok": true,
+      "accuracy": 0.5,
+      "passed": 1,
+      "total": 2,
+      "checks": {
+        "discretionary_share": {
+          "ok": false,
+          "rel_error": 1.3971,
+          "gold": 28281.19,
+          "pred": 67792.0
+        },
+        "best_cut_category": {
+          "ok": true,
+          "gold": "shopping",
+          "pred": "shopping"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 11905,
+        "completion_tokens": 136,
+        "total_tokens": 12041,
+        "cost": 0.0012177,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 257,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0012177,
+          "upstream_inference_prompt_cost": 0.0011905,
+          "upstream_inference_completions_cost": 2.72e-05
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "model": "qwen/qwen-2.5-7b-instruct",
+      "codec": "month_ids",
+      "task": "reports",
+      "ok": true,
+      "accuracy": 0.2,
+      "passed": 1,
+      "total": 5,
+      "checks": {
+        "n_transactions": {
+          "ok": false,
+          "rel_error": 0.88,
+          "gold": 1000.0,
+          "pred": 120.0
+        },
+        "total_income": {
+          "ok": false,
+          "rel_error": 41.726,
+          "gold": 90564.2,
+          "pred": 3869447.0
+        },
+        "total_expense": {
+          "ok": false,
+          "rel_error": 45.8707,
+          "gold": 75572.82,
+          "pred": 3542152.0
+        },
+        "net": {
+          "ok": false,
+          "rel_error": 20.8322,
+          "gold": 14991.38,
+          "pred": 327295.0
+        },
+        "top_category": {
+          "ok": true,
+          "gold": "rent",
+          "pred": "rent"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 11858,
+        "completion_tokens": 241,
+        "total_tokens": 12099,
+        "cost": 0.001234,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 210,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.001234,
+          "upstream_inference_prompt_cost": 0.0011858,
+          "upstream_inference_completions_cost": 4.82e-05
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "model": "qwen/qwen-2.5-7b-instruct",
+      "codec": "task_rows",
+      "task": "forecasts",
+      "ok": true,
+      "accuracy": 0.0,
+      "passed": 0,
+      "total": 2,
+      "checks": {
+        "next_month_spend": {
+          "ok": false,
+          "rel_error": 2.9741,
+          "gold": 2888.14,
+          "pred": 11477.67
+        },
+        "next_month_income": {
+          "ok": false,
+          "rel_error": 69.475,
+          "gold": 4581.06,
+          "pred": 322850.0
+        }
+      },
+      "usage": {
+        "prompt_tokens": 13490,
+        "completion_tokens": 108,
+        "total_tokens": 13598,
+        "cost": 0.0013706,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 195,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0013706,
+          "upstream_inference_prompt_cost": 0.001349,
+          "upstream_inference_completions_cost": 2.16e-05
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "model": "qwen/qwen-2.5-7b-instruct",
+      "codec": "task_rows",
+      "task": "optimize",
+      "ok": true,
+      "accuracy": 0.5,
+      "passed": 1,
+      "total": 2,
+      "checks": {
+        "discretionary_share": {
+          "ok": false,
+          "rel_error": 0.9721,
+          "gold": 28281.19,
+          "pred": 55773.2
+        },
+        "best_cut_category": {
+          "ok": true,
+          "gold": "shopping",
+          "pred": "shopping"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 13552,
+        "completion_tokens": 138,
+        "total_tokens": 13690,
+        "cost": 0.0013828,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 257,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0013828,
+          "upstream_inference_prompt_cost": 0.0013552,
+          "upstream_inference_completions_cost": 2.76e-05
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "model": "qwen/qwen-2.5-7b-instruct",
+      "codec": "task_rows",
+      "task": "reports",
+      "ok": true,
+      "accuracy": 0.0,
+      "passed": 0,
+      "total": 5,
+      "checks": {
+        "n_transactions": {
+          "ok": false,
+          "rel_error": 0.9,
+          "gold": 1000.0,
+          "pred": 100.0
+        },
+        "total_income": {
+          "ok": false,
+          "rel_error": 0.9115,
+          "gold": 90564.2,
+          "pred": 8017.75
+        },
+        "total_expense": {
+          "ok": false,
+          "rel_error": 0.1604,
+          "gold": 75572.82,
+          "pred": 63449.75
+        },
+        "net": {
+          "ok": false,
+          "rel_error": 4.6976,
+          "gold": 14991.38,
+          "pred": -55432.0
+        },
+        "top_category": {
+          "ok": false,
+          "gold": "rent",
+          "pred": "sho"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 13505,
+        "completion_tokens": 213,
+        "total_tokens": 13718,
+        "cost": 0.0013931,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 210,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0013931,
+          "upstream_inference_prompt_cost": 0.0013505,
+          "upstream_inference_completions_cost": 4.26e-05
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "model": "qwen/qwen-2.5-7b-instruct",
+      "codec": "tool_views",
+      "task": "forecasts",
+      "ok": true,
+      "accuracy": 1.0,
+      "passed": 2,
+      "total": 2,
+      "checks": {
+        "next_month_spend": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 2888.14,
+          "pred": 2888.14
+        },
+        "next_month_income": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 4581.06,
+          "pred": 4581.06
+        }
+      },
+      "usage": {
+        "prompt_tokens": 1563,
+        "completion_tokens": 100,
+        "total_tokens": 1663,
+        "cost": 0.0001763,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 81,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0001763,
+          "upstream_inference_prompt_cost": 0.0001563,
+          "upstream_inference_completions_cost": 2e-05
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "model": "qwen/qwen-2.5-7b-instruct",
+      "codec": "tool_views",
+      "task": "optimize",
+      "ok": true,
+      "accuracy": 1.0,
+      "passed": 2,
+      "total": 2,
+      "checks": {
+        "discretionary_share": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 28281.19,
+          "pred": 28281.19
+        },
+        "best_cut_category": {
+          "ok": true,
+          "gold": "shopping",
+          "pred": "shopping"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 1625,
+        "completion_tokens": 156,
+        "total_tokens": 1781,
+        "cost": 0.0001937,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 81,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0001937,
+          "upstream_inference_prompt_cost": 0.0001625,
+          "upstream_inference_completions_cost": 3.12e-05
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "model": "qwen/qwen-2.5-7b-instruct",
+      "codec": "tool_views",
+      "task": "reports",
+      "ok": true,
+      "accuracy": 1.0,
+      "passed": 5,
+      "total": 5,
+      "checks": {
+        "n_transactions": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 1000.0,
+          "pred": 1000.0
+        },
+        "total_income": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 90564.2,
+          "pred": 90564.2
+        },
+        "total_expense": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 75572.82,
+          "pred": 75572.82
+        },
+        "net": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 14991.38,
+          "pred": 14991.38
+        },
+        "top_category": {
+          "ok": true,
+          "gold": "rent",
+          "pred": "rent"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 1578,
+        "completion_tokens": 222,
+        "total_tokens": 1800,
+        "cost": 0.0002022,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 6,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0002022,
+          "upstream_inference_prompt_cost": 0.0001578,
+          "upstream_inference_completions_cost": 4.44e-05
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "model": "qwen/qwen-2.5-7b-instruct",
       "codec": "yaml_like",
       "task": "forecasts",
       "ok": true,
@@ -778,17 +2200,26 @@
   "summary": {
     "by_codec_accuracy": {
       "aggregates_only": 0.8333,
+      "cat_inverted": 0.0,
       "dict_ids": 0.1667,
+      "dsl_cat_month": 0.0667,
+      "group_cat_name_daynum": 0.0,
       "gzip_b64": 0.0,
       "line_natural": 0.1667,
+      "month_cat_sums": 0.0333,
+      "month_ids": 0.2333,
+      "task_rows": 0.1667,
+      "tiny_ledger_vm": 0.0667,
+      "tool_views": 1.0,
       "yaml_like": 0.1667
     },
     "by_model_accuracy": {
-      "qwen/qwen-2.5-7b-instruct": 0.2667
+      "google/gemini-2.5-flash": 0.0667,
+      "qwen/qwen-2.5-7b-instruct": 0.2333
     },
-    "prompt_tokens": 202230,
-    "completion_tokens": 2198,
-    "n_ok": 15,
+    "prompt_tokens": 397041,
+    "completion_tokens": 6493,
+    "n_ok": 42,
     "n_fail": 0
   }
 }

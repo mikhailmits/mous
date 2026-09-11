@@ -1,0 +1,46 @@
+{
+  "model": "qwen/qwen-2.5-7b-instruct",
+  "codec": "group_cat_name_daynum",
+  "task": "reports",
+  "ok": true,
+  "accuracy": 0.0,
+  "passed": 0,
+  "total": 5,
+  "checks": {
+    "n_transactions": {
+      "ok": false,
+      "rel_error": 0.892,
+      "gold": 1000.0,
+      "pred": 108.0
+    },
+    "total_income": {
+      "ok": false,
+      "rel_error": 3.1357,
+      "gold": 90564.2,
+      "pred": 374549.0
+    },
+    "total_expense": {
+      "ok": false,
+      "rel_error": 12.8659,
+      "gold": 75572.82,
+      "pred": 1047887.0
+    },
+    "net": {
+      "ok": false,
+      "rel_error": 45.915,
+      "gold": 14991.38,
+      "pred": -673338.0
+    },
+    "top_category": {
+      "ok": false,
+      "gold": "rent",
+      "pred": "sushi place"
+    }
+  },
+  "usage": {
+    "prompt_tokens": 9596,
+    "completion_tokens": 118,
+    "total_tokens": 9714
+  },
+  "preview": "{\n  \"reports\": {\n    \"n_transactions\": 108,\n    \"n_income\": 22,\n    \"n_expense\": 86,\n    \"total_income\": 374549.00,\n    \"total_expense\": 1047887.00,\n    \"net\": -673338.00,\n    \"top_category_by_spend\": \"sushi place\",\n    \"top_category_spend\": 22230.00\n  }\n}"
+}

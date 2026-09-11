@@ -141,11 +141,15 @@ def pick_models(limit: int = 3) -> list[str]:
     return out
 
 
-def run(model_limit: int = 2, codec_names: list[str] | None = None) -> dict:
+def run(
+    model_limit: int = 2,
+    codec_names: list[str] | None = None,
+    models: list[str] | None = None,
+) -> dict:
     load_all()
     bundle = load_bundle()
     gold = load_gold()
-    models = pick_models(limit=model_limit)
+    models = models or pick_models(limit=model_limit)
     names = codec_names or LLM_CODECS
     encoded = {item.name: item for item in encode_all(bundle) if item.name in names}
     results = []

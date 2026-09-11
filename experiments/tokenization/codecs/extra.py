@@ -6,9 +6,8 @@ Add @fn_codec functions here or in extra_*.py files that `load_all` can import.
 from __future__ import annotations
 
 # Subagents should register codecs via experiments.tokenization.codecs.base.fn_codec
-# Example:
-# from experiments.tokenization.codecs.base import fn_codec
-# from experiments.tokenization.bundle import Bundle
-# @fn_codec("my_codec", "novel", "what it does")
-# def my_codec(bundle: Bundle) -> str:
-#     return "..."
+# load_all() also imports extra_*.py; this import is a stable hook for the spaces specialist.
+from experiments.tokenization.codecs import extra_spaces as _extra_spaces  # noqa: F401
+from experiments.tokenization.codecs import extra_dsl as _extra_dsl  # noqa: F401
+from experiments.tokenization.codecs import extra_images as _extra_images  # noqa: F401
+from experiments.tokenization.codecs import extra_compress as _extra_compress  # noqa: F401

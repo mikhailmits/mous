@@ -1,0 +1,1324 @@
+{
+  "models": [
+    "google/gemini-2.5-flash",
+    "openai/gpt-4.1-mini",
+    "openai/gpt-5-nano"
+  ],
+  "codecs": [
+    "yaml_like",
+    "dsl_cat_month",
+    "json_compact"
+  ],
+  "task": "reports",
+  "prompt": "SYSTEM_COMPACT + REPORTS_EIGHT_USER + ignore_rest",
+  "spend": 0.044536,
+  "results": [
+    {
+      "model": "google/gemini-2.5-flash",
+      "codec": "yaml_like",
+      "task": "reports",
+      "prompt_set": "eight",
+      "ok": true,
+      "accuracy": 0.2,
+      "passed": 1,
+      "total": 5,
+      "checks": {
+        "n_transactions": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 1000.0,
+          "pred": 1000.0
+        },
+        "total_income": {
+          "ok": false,
+          "rel_error": 0.2381,
+          "gold": 90564.2,
+          "pred": 69000.09
+        },
+        "total_expense": {
+          "ok": false,
+          "rel_error": 0.4423,
+          "gold": 75572.82,
+          "pred": 109000.09
+        },
+        "net": {
+          "ok": false,
+          "rel_error": 3.6682,
+          "gold": 14991.38,
+          "pred": -40000.0
+        },
+        "top_category": {
+          "ok": false,
+          "gold": "rent",
+          "pred": "groceries"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 15289,
+        "completion_tokens": 90,
+        "cost": 0.0048117
+      },
+      "preview": "{\"reports\":{\"n_transactions\":1000,\"n_income\":50,\"n_expense\":950,\"total_income\":69000.09,\"total_expense\":109000.09,\"net\":-40000.0,\"top_category_by_spend\":\"groceries\",\"top_category_spend\":14000.0}}",
+      "parsed": {
+        "reports": {
+          "n_transactions": 1000,
+          "n_income": 50,
+          "n_expense": 950,
+          "total_income": 69000.09,
+          "total_expense": 109000.09,
+          "net": -40000.0,
+          "top_category_by_spend": "groceries",
+          "top_category_spend": 14000.0
+        }
+      }
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "codec": "dsl_cat_month",
+      "task": "reports",
+      "prompt_set": "eight",
+      "ok": true,
+      "accuracy": 0.2,
+      "passed": 1,
+      "total": 5,
+      "checks": {
+        "n_transactions": {
+          "ok": false,
+          "rel_error": 0.099,
+          "gold": 1000.0,
+          "pred": 1099.0
+        },
+        "total_income": {
+          "ok": false,
+          "rel_error": 0.3375,
+          "gold": 90564.2,
+          "pred": 60000.0
+        },
+        "total_expense": {
+          "ok": false,
+          "rel_error": 0.3516,
+          "gold": 75572.82,
+          "pred": 49000.0
+        },
+        "net": {
+          "ok": false,
+          "rel_error": 0.2662,
+          "gold": 14991.38,
+          "pred": 11000.0
+        },
+        "top_category": {
+          "ok": true,
+          "gold": "rent",
+          "pred": "rent"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 8074,
+        "completion_tokens": 95,
+        "cost": 0.0026597
+      },
+      "preview": "```json\n{\"reports\":{\"n_transactions\":1099,\"n_income\":40,\"n_expense\":1059,\"total_income\":60000.00,\"total_expense\":49000.00,\"net\":11000.00,\"top_category_by_spend\":\"rent\",\"top_category_spend\":22000.00}}\n```",
+      "parsed": {
+        "reports": {
+          "n_transactions": 1099,
+          "n_income": 40,
+          "n_expense": 1059,
+          "total_income": 60000.0,
+          "total_expense": 49000.0,
+          "net": 11000.0,
+          "top_category_by_spend": "rent",
+          "top_category_spend": 22000.0
+        }
+      }
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "codec": "json_compact",
+      "task": "reports",
+      "prompt_set": "eight",
+      "ok": true,
+      "accuracy": 0.2,
+      "passed": 1,
+      "total": 5,
+      "checks": {
+        "n_transactions": {
+          "ok": false,
+          "rel_error": 0.6,
+          "gold": 1000.0,
+          "pred": 400.0
+        },
+        "total_income": {
+          "ok": false,
+          "rel_error": 0.6688,
+          "gold": 90564.2,
+          "pred": 29999.07
+        },
+        "total_expense": {
+          "ok": false,
+          "rel_error": 0.603,
+          "gold": 75572.82,
+          "pred": 30000.06
+        },
+        "net": {
+          "ok": false,
+          "rel_error": 1.0001,
+          "gold": 14991.38,
+          "pred": -0.99
+        },
+        "top_category": {
+          "ok": true,
+          "gold": "rent",
+          "pred": "rent"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 40413,
+        "completion_tokens": 90,
+        "cost": 0.0123489
+      },
+      "preview": "```json\n{\"reports\":{\"n_transactions\":400,\"n_income\":25,\"n_expense\":375,\"total_income\":29999.07,\"total_expense\":30000.06,\"net\":-0.99,\"top_category_by_spend\":\"rent\",\"top_category_spend\":14300.26}}\n```",
+      "parsed": {
+        "reports": {
+          "n_transactions": 400,
+          "n_income": 25,
+          "n_expense": 375,
+          "total_income": 29999.07,
+          "total_expense": 30000.06,
+          "net": -0.99,
+          "top_category_by_spend": "rent",
+          "top_category_spend": 14300.26
+        }
+      }
+    },
+    {
+      "model": "openai/gpt-4.1-mini",
+      "codec": "yaml_like",
+      "task": "reports",
+      "prompt_set": "eight",
+      "ok": true,
+      "accuracy": 0.2,
+      "passed": 1,
+      "total": 5,
+      "checks": {
+        "n_transactions": {
+          "ok": false,
+          "rel_error": 0.023,
+          "gold": 1000.0,
+          "pred": 1023.0
+        },
+        "total_income": {
+          "ok": false,
+          "rel_error": 0.6212,
+          "gold": 90564.2,
+          "pred": 34302.99
+        },
+        "total_expense": {
+          "ok": false,
+          "rel_error": 0.2671,
+          "gold": 75572.82,
+          "pred": 55388.88
+        },
+        "net": {
+          "ok": false,
+          "rel_error": 2.4065,
+          "gold": 14991.38,
+          "pred": -21085.89
+        },
+        "top_category": {
+          "ok": true,
+          "gold": "rent",
+          "pred": "rent"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 12347,
+        "completion_tokens": 64,
+        "cost": 0.0050412
+      },
+      "preview": "{\"reports\":{\"n_transactions\":1023,\"n_income\":69,\"n_expense\":954,\"total_income\":34302.99,\"total_expense\":55388.88,\"net\":-21085.89,\"top_category_by_spend\":\"rent\",\"top_category_spend\":14200.43}}",
+      "parsed": {
+        "reports": {
+          "n_transactions": 1023,
+          "n_income": 69,
+          "n_expense": 954,
+          "total_income": 34302.99,
+          "total_expense": 55388.88,
+          "net": -21085.89,
+          "top_category_by_spend": "rent",
+          "top_category_spend": 14200.43
+        }
+      }
+    },
+    {
+      "model": "openai/gpt-4.1-mini",
+      "codec": "dsl_cat_month",
+      "task": "reports",
+      "prompt_set": "eight",
+      "ok": true,
+      "accuracy": 0.2,
+      "passed": 1,
+      "total": 5,
+      "checks": {
+        "n_transactions": {
+          "ok": false,
+          "rel_error": 0.023,
+          "gold": 1000.0,
+          "pred": 1023.0
+        },
+        "total_income": {
+          "ok": false,
+          "rel_error": 0.6766,
+          "gold": 90564.2,
+          "pred": 29288.91
+        },
+        "total_expense": {
+          "ok": false,
+          "rel_error": 0.1612,
+          "gold": 75572.82,
+          "pred": 63388.88
+        },
+        "net": {
+          "ok": false,
+          "rel_error": 3.2746,
+          "gold": 14991.38,
+          "pred": -34099.97
+        },
+        "top_category": {
+          "ok": true,
+          "gold": "rent",
+          "pred": "rent"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 5634,
+        "completion_tokens": 64,
+        "cost": 0.002356
+      },
+      "preview": "{\"reports\":{\"n_transactions\":1023,\"n_income\":69,\"n_expense\":954,\"total_income\":29288.91,\"total_expense\":63388.88,\"net\":-34099.97,\"top_category_by_spend\":\"rent\",\"top_category_spend\":22788.88}}",
+      "parsed": {
+        "reports": {
+          "n_transactions": 1023,
+          "n_income": 69,
+          "n_expense": 954,
+          "total_income": 29288.91,
+          "total_expense": 63388.88,
+          "net": -34099.97,
+          "top_category_by_spend": "rent",
+          "top_category_spend": 22788.88
+        }
+      }
+    },
+    {
+      "model": "openai/gpt-4.1-mini",
+      "codec": "dsl_cat_idx",
+      "task": "reports",
+      "prompt_set": "eight",
+      "ok": true,
+      "accuracy": 0.2,
+      "passed": 1,
+      "total": 5,
+      "checks": {
+        "n_transactions": {
+          "ok": false,
+          "rel_error": 0.421,
+          "gold": 1000.0,
+          "pred": 579.0
+        },
+        "total_income": {
+          "ok": false,
+          "rel_error": 0.7362,
+          "gold": 90564.2,
+          "pred": 23888.88
+        },
+        "total_expense": {
+          "ok": false,
+          "rel_error": 0.3346,
+          "gold": 75572.82,
+          "pred": 50288.88
+        },
+        "net": {
+          "ok": false,
+          "rel_error": 2.761,
+          "gold": 14991.38,
+          "pred": -26400.0
+        },
+        "top_category": {
+          "ok": true,
+          "gold": "rent",
+          "pred": "rent"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 5267,
+        "completion_tokens": 63,
+        "cost": 0.0022076
+      },
+      "preview": "{\"reports\":{\"n_transactions\":579,\"n_income\":39,\"n_expense\":540,\"total_income\":23888.88,\"total_expense\":50288.88,\"net\":-26400.00,\"top_category_by_spend\":\"rent\",\"top_category_spend\":22288.23}}",
+      "parsed": {
+        "reports": {
+          "n_transactions": 579,
+          "n_income": 39,
+          "n_expense": 540,
+          "total_income": 23888.88,
+          "total_expense": 50288.88,
+          "net": -26400.0,
+          "top_category_by_spend": "rent",
+          "top_category_spend": 22288.23
+        }
+      }
+    },
+    {
+      "model": "openai/gpt-4.1-mini",
+      "codec": "json_compact",
+      "task": "reports",
+      "prompt_set": "eight",
+      "ok": true,
+      "accuracy": 0.2,
+      "passed": 1,
+      "total": 5,
+      "checks": {
+        "n_transactions": {
+          "ok": false,
+          "rel_error": 0.023,
+          "gold": 1000.0,
+          "pred": 1023.0
+        },
+        "total_income": {
+          "ok": false,
+          "rel_error": 0.5419,
+          "gold": 90564.2,
+          "pred": 41488.99
+        },
+        "total_expense": {
+          "ok": false,
+          "rel_error": 0.0818,
+          "gold": 75572.82,
+          "pred": 69388.88
+        },
+        "net": {
+          "ok": false,
+          "rel_error": 2.8611,
+          "gold": 14991.38,
+          "pred": -27899.89
+        },
+        "top_category": {
+          "ok": true,
+          "gold": "rent",
+          "pred": "rent"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 34879,
+        "completion_tokens": 64,
+        "cost": 0.014054
+      },
+      "preview": "{\"reports\":{\"n_transactions\":1023,\"n_income\":52,\"n_expense\":971,\"total_income\":41488.99,\"total_expense\":69388.88,\"net\":-27899.89,\"top_category_by_spend\":\"rent\",\"top_category_spend\":35688.88}}",
+      "parsed": {
+        "reports": {
+          "n_transactions": 1023,
+          "n_income": 52,
+          "n_expense": 971,
+          "total_income": 41488.99,
+          "total_expense": 69388.88,
+          "net": -27899.89,
+          "top_category_by_spend": "rent",
+          "top_category_spend": 35688.88
+        }
+      }
+    },
+    {
+      "model": "openai/gpt-5-nano",
+      "codec": "dsl_cat_idx",
+      "task": "reports",
+      "prompt_set": "eight",
+      "ok": true,
+      "accuracy": 0.0,
+      "passed": 0,
+      "total": 5,
+      "checks": {
+        "n_transactions": {
+          "ok": false,
+          "reason": "missing_pred",
+          "gold": {
+            "n_transactions": 1000,
+            "n_income": 58,
+            "n_expense": 942,
+            "total_income": 90564.2,
+            "total_expense": 75572.82,
+            "net": 14991.38,
+            "top_category_by_spend": "rent",
+            "top_category_spend": 22703.2,
+            "top5_categories": [
+              {
+                "category": "rent",
+                "spend": 22703.2
+              },
+              {
+                "category": "shopping",
+                "spend": 9175.33
+              },
+              {
+                "category": "groceries",
+                "spend": 9141.71
+              },
+              {
+                "category": "travel",
+                "spend": 8309.94
+              },
+              {
+                "category": "restaurants",
+                "spend": 6242.68
+              }
+            ],
+            "by_category_spend": {
+              "rent": 22703.2,
+              "shopping": 9175.33,
+              "groceries": 9141.71,
+              "travel": 8309.94,
+              "restaurants": 6242.68,
+              "education": 4105.17,
+              "healthcare": 3526.17,
+              "entertainment": 2755.51,
+              "utilities": 2490.27,
+              "transport": 1988.44,
+              "subscriptions": 1785.82,
+              "insurance": 1550.85,
+              "gifts": 1191.67,
+              "coffee": 606.06
+            },
+            "by_month_spend": {
+              "2025-03": 3429.37,
+              "2025-04": 4409.05,
+              "2025-05": 3646.05,
+              "2025-06": 4574.15,
+              "2025-07": 4391.92,
+              "2025-08": 5615.54,
+              "2025-09": 4657.28,
+              "2025-10": 4203.69,
+              "2025-11": 4071.99,
+              "2025-12": 4052.28,
+              "2026-01": 4669.94,
+              "2026-02": 2899.51,
+              "2026-03": 4030.58,
+              "2026-04": 4029.57,
+              "2026-05": 4250.42,
+              "2026-06": 3977.06,
+              "2026-07": 3095.87,
+              "2026-08": 3353.98,
+              "2026-09": 2214.57
+            },
+            "by_month_income": {
+              "2025-03": 3243.94,
+              "2025-04": 4434.09,
+              "2025-05": 5189.81,
+              "2025-06": 4437.05,
+              "2025-07": 4459.41,
+              "2025-08": 5029.3,
+              "2025-09": 3587.23,
+              "2025-10": 5527.49,
+              "2025-11": 5904.04,
+              "2025-12": 5246.65,
+              "2026-01": 4824.61,
+              "2026-02": 6469.36,
+              "2026-03": 5576.93,
+              "2026-04": 4027.13,
+              "2026-05": 4569.16,
+              "2026-06": 4294.81,
+              "2026-07": 5080.61,
+              "2026-08": 5417.78,
+              "2026-09": 3244.8
+            },
+            "by_account_net": {
+              "main": 6459.72,
+              "credit": -8403.5,
+              "savings": 16935.16
+            },
+            "largest_expense": {
+              "name": "apartment rent",
+              "value": -1213.9,
+              "date": "2025-12-03",
+              "category": "rent"
+            },
+            "n_subscriptions": 5
+          }
+        },
+        "total_income": {
+          "ok": false,
+          "reason": "missing_pred",
+          "gold": {
+            "n_transactions": 1000,
+            "n_income": 58,
+            "n_expense": 942,
+            "total_income": 90564.2,
+            "total_expense": 75572.82,
+            "net": 14991.38,
+            "top_category_by_spend": "rent",
+            "top_category_spend": 22703.2,
+            "top5_categories": [
+              {
+                "category": "rent",
+                "spend": 22703.2
+              },
+              {
+                "category": "shopping",
+                "spend": 9175.33
+              },
+              {
+                "category": "groceries",
+                "spend": 9141.71
+              },
+              {
+                "category": "travel",
+                "spend": 8309.94
+              },
+              {
+                "category": "restaurants",
+                "spend": 6242.68
+              }
+            ],
+            "by_category_spend": {
+              "rent": 22703.2,
+              "shopping": 9175.33,
+              "groceries": 9141.71,
+              "travel": 8309.94,
+              "restaurants": 6242.68,
+              "education": 4105.17,
+              "healthcare": 3526.17,
+              "entertainment": 2755.51,
+              "utilities": 2490.27,
+              "transport": 1988.44,
+              "subscriptions": 1785.82,
+              "insurance": 1550.85,
+              "gifts": 1191.67,
+              "coffee": 606.06
+            },
+            "by_month_spend": {
+              "2025-03": 3429.37,
+              "2025-04": 4409.05,
+              "2025-05": 3646.05,
+              "2025-06": 4574.15,
+              "2025-07": 4391.92,
+              "2025-08": 5615.54,
+              "2025-09": 4657.28,
+              "2025-10": 4203.69,
+              "2025-11": 4071.99,
+              "2025-12": 4052.28,
+              "2026-01": 4669.94,
+              "2026-02": 2899.51,
+              "2026-03": 4030.58,
+              "2026-04": 4029.57,
+              "2026-05": 4250.42,
+              "2026-06": 3977.06,
+              "2026-07": 3095.87,
+              "2026-08": 3353.98,
+              "2026-09": 2214.57
+            },
+            "by_month_income": {
+              "2025-03": 3243.94,
+              "2025-04": 4434.09,
+              "2025-05": 5189.81,
+              "2025-06": 4437.05,
+              "2025-07": 4459.41,
+              "2025-08": 5029.3,
+              "2025-09": 3587.23,
+              "2025-10": 5527.49,
+              "2025-11": 5904.04,
+              "2025-12": 5246.65,
+              "2026-01": 4824.61,
+              "2026-02": 6469.36,
+              "2026-03": 5576.93,
+              "2026-04": 4027.13,
+              "2026-05": 4569.16,
+              "2026-06": 4294.81,
+              "2026-07": 5080.61,
+              "2026-08": 5417.78,
+              "2026-09": 3244.8
+            },
+            "by_account_net": {
+              "main": 6459.72,
+              "credit": -8403.5,
+              "savings": 16935.16
+            },
+            "largest_expense": {
+              "name": "apartment rent",
+              "value": -1213.9,
+              "date": "2025-12-03",
+              "category": "rent"
+            },
+            "n_subscriptions": 5
+          }
+        },
+        "total_expense": {
+          "ok": false,
+          "reason": "missing_pred",
+          "gold": {
+            "n_transactions": 1000,
+            "n_income": 58,
+            "n_expense": 942,
+            "total_income": 90564.2,
+            "total_expense": 75572.82,
+            "net": 14991.38,
+            "top_category_by_spend": "rent",
+            "top_category_spend": 22703.2,
+            "top5_categories": [
+              {
+                "category": "rent",
+                "spend": 22703.2
+              },
+              {
+                "category": "shopping",
+                "spend": 9175.33
+              },
+              {
+                "category": "groceries",
+                "spend": 9141.71
+              },
+              {
+                "category": "travel",
+                "spend": 8309.94
+              },
+              {
+                "category": "restaurants",
+                "spend": 6242.68
+              }
+            ],
+            "by_category_spend": {
+              "rent": 22703.2,
+              "shopping": 9175.33,
+              "groceries": 9141.71,
+              "travel": 8309.94,
+              "restaurants": 6242.68,
+              "education": 4105.17,
+              "healthcare": 3526.17,
+              "entertainment": 2755.51,
+              "utilities": 2490.27,
+              "transport": 1988.44,
+              "subscriptions": 1785.82,
+              "insurance": 1550.85,
+              "gifts": 1191.67,
+              "coffee": 606.06
+            },
+            "by_month_spend": {
+              "2025-03": 3429.37,
+              "2025-04": 4409.05,
+              "2025-05": 3646.05,
+              "2025-06": 4574.15,
+              "2025-07": 4391.92,
+              "2025-08": 5615.54,
+              "2025-09": 4657.28,
+              "2025-10": 4203.69,
+              "2025-11": 4071.99,
+              "2025-12": 4052.28,
+              "2026-01": 4669.94,
+              "2026-02": 2899.51,
+              "2026-03": 4030.58,
+              "2026-04": 4029.57,
+              "2026-05": 4250.42,
+              "2026-06": 3977.06,
+              "2026-07": 3095.87,
+              "2026-08": 3353.98,
+              "2026-09": 2214.57
+            },
+            "by_month_income": {
+              "2025-03": 3243.94,
+              "2025-04": 4434.09,
+              "2025-05": 5189.81,
+              "2025-06": 4437.05,
+              "2025-07": 4459.41,
+              "2025-08": 5029.3,
+              "2025-09": 3587.23,
+              "2025-10": 5527.49,
+              "2025-11": 5904.04,
+              "2025-12": 5246.65,
+              "2026-01": 4824.61,
+              "2026-02": 6469.36,
+              "2026-03": 5576.93,
+              "2026-04": 4027.13,
+              "2026-05": 4569.16,
+              "2026-06": 4294.81,
+              "2026-07": 5080.61,
+              "2026-08": 5417.78,
+              "2026-09": 3244.8
+            },
+            "by_account_net": {
+              "main": 6459.72,
+              "credit": -8403.5,
+              "savings": 16935.16
+            },
+            "largest_expense": {
+              "name": "apartment rent",
+              "value": -1213.9,
+              "date": "2025-12-03",
+              "category": "rent"
+            },
+            "n_subscriptions": 5
+          }
+        },
+        "net": {
+          "ok": false,
+          "reason": "missing_pred",
+          "gold": {
+            "n_transactions": 1000,
+            "n_income": 58,
+            "n_expense": 942,
+            "total_income": 90564.2,
+            "total_expense": 75572.82,
+            "net": 14991.38,
+            "top_category_by_spend": "rent",
+            "top_category_spend": 22703.2,
+            "top5_categories": [
+              {
+                "category": "rent",
+                "spend": 22703.2
+              },
+              {
+                "category": "shopping",
+                "spend": 9175.33
+              },
+              {
+                "category": "groceries",
+                "spend": 9141.71
+              },
+              {
+                "category": "travel",
+                "spend": 8309.94
+              },
+              {
+                "category": "restaurants",
+                "spend": 6242.68
+              }
+            ],
+            "by_category_spend": {
+              "rent": 22703.2,
+              "shopping": 9175.33,
+              "groceries": 9141.71,
+              "travel": 8309.94,
+              "restaurants": 6242.68,
+              "education": 4105.17,
+              "healthcare": 3526.17,
+              "entertainment": 2755.51,
+              "utilities": 2490.27,
+              "transport": 1988.44,
+              "subscriptions": 1785.82,
+              "insurance": 1550.85,
+              "gifts": 1191.67,
+              "coffee": 606.06
+            },
+            "by_month_spend": {
+              "2025-03": 3429.37,
+              "2025-04": 4409.05,
+              "2025-05": 3646.05,
+              "2025-06": 4574.15,
+              "2025-07": 4391.92,
+              "2025-08": 5615.54,
+              "2025-09": 4657.28,
+              "2025-10": 4203.69,
+              "2025-11": 4071.99,
+              "2025-12": 4052.28,
+              "2026-01": 4669.94,
+              "2026-02": 2899.51,
+              "2026-03": 4030.58,
+              "2026-04": 4029.57,
+              "2026-05": 4250.42,
+              "2026-06": 3977.06,
+              "2026-07": 3095.87,
+              "2026-08": 3353.98,
+              "2026-09": 2214.57
+            },
+            "by_month_income": {
+              "2025-03": 3243.94,
+              "2025-04": 4434.09,
+              "2025-05": 5189.81,
+              "2025-06": 4437.05,
+              "2025-07": 4459.41,
+              "2025-08": 5029.3,
+              "2025-09": 3587.23,
+              "2025-10": 5527.49,
+              "2025-11": 5904.04,
+              "2025-12": 5246.65,
+              "2026-01": 4824.61,
+              "2026-02": 6469.36,
+              "2026-03": 5576.93,
+              "2026-04": 4027.13,
+              "2026-05": 4569.16,
+              "2026-06": 4294.81,
+              "2026-07": 5080.61,
+              "2026-08": 5417.78,
+              "2026-09": 3244.8
+            },
+            "by_account_net": {
+              "main": 6459.72,
+              "credit": -8403.5,
+              "savings": 16935.16
+            },
+            "largest_expense": {
+              "name": "apartment rent",
+              "value": -1213.9,
+              "date": "2025-12-03",
+              "category": "rent"
+            },
+            "n_subscriptions": 5
+          }
+        },
+        "top_category": {
+          "ok": false,
+          "reason": "missing_pred"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 5266,
+        "completion_tokens": 640,
+        "cost": 0.0005193
+      },
+      "preview": "",
+      "parsed": {}
+    },
+    {
+      "model": "openai/gpt-5-nano",
+      "codec": "dsl_cat_month",
+      "task": "reports",
+      "prompt_set": "eight",
+      "ok": true,
+      "accuracy": 0.0,
+      "passed": 0,
+      "total": 5,
+      "checks": {
+        "n_transactions": {
+          "ok": false,
+          "reason": "missing_pred",
+          "gold": {
+            "n_transactions": 1000,
+            "n_income": 58,
+            "n_expense": 942,
+            "total_income": 90564.2,
+            "total_expense": 75572.82,
+            "net": 14991.38,
+            "top_category_by_spend": "rent",
+            "top_category_spend": 22703.2,
+            "top5_categories": [
+              {
+                "category": "rent",
+                "spend": 22703.2
+              },
+              {
+                "category": "shopping",
+                "spend": 9175.33
+              },
+              {
+                "category": "groceries",
+                "spend": 9141.71
+              },
+              {
+                "category": "travel",
+                "spend": 8309.94
+              },
+              {
+                "category": "restaurants",
+                "spend": 6242.68
+              }
+            ],
+            "by_category_spend": {
+              "rent": 22703.2,
+              "shopping": 9175.33,
+              "groceries": 9141.71,
+              "travel": 8309.94,
+              "restaurants": 6242.68,
+              "education": 4105.17,
+              "healthcare": 3526.17,
+              "entertainment": 2755.51,
+              "utilities": 2490.27,
+              "transport": 1988.44,
+              "subscriptions": 1785.82,
+              "insurance": 1550.85,
+              "gifts": 1191.67,
+              "coffee": 606.06
+            },
+            "by_month_spend": {
+              "2025-03": 3429.37,
+              "2025-04": 4409.05,
+              "2025-05": 3646.05,
+              "2025-06": 4574.15,
+              "2025-07": 4391.92,
+              "2025-08": 5615.54,
+              "2025-09": 4657.28,
+              "2025-10": 4203.69,
+              "2025-11": 4071.99,
+              "2025-12": 4052.28,
+              "2026-01": 4669.94,
+              "2026-02": 2899.51,
+              "2026-03": 4030.58,
+              "2026-04": 4029.57,
+              "2026-05": 4250.42,
+              "2026-06": 3977.06,
+              "2026-07": 3095.87,
+              "2026-08": 3353.98,
+              "2026-09": 2214.57
+            },
+            "by_month_income": {
+              "2025-03": 3243.94,
+              "2025-04": 4434.09,
+              "2025-05": 5189.81,
+              "2025-06": 4437.05,
+              "2025-07": 4459.41,
+              "2025-08": 5029.3,
+              "2025-09": 3587.23,
+              "2025-10": 5527.49,
+              "2025-11": 5904.04,
+              "2025-12": 5246.65,
+              "2026-01": 4824.61,
+              "2026-02": 6469.36,
+              "2026-03": 5576.93,
+              "2026-04": 4027.13,
+              "2026-05": 4569.16,
+              "2026-06": 4294.81,
+              "2026-07": 5080.61,
+              "2026-08": 5417.78,
+              "2026-09": 3244.8
+            },
+            "by_account_net": {
+              "main": 6459.72,
+              "credit": -8403.5,
+              "savings": 16935.16
+            },
+            "largest_expense": {
+              "name": "apartment rent",
+              "value": -1213.9,
+              "date": "2025-12-03",
+              "category": "rent"
+            },
+            "n_subscriptions": 5
+          }
+        },
+        "total_income": {
+          "ok": false,
+          "reason": "missing_pred",
+          "gold": {
+            "n_transactions": 1000,
+            "n_income": 58,
+            "n_expense": 942,
+            "total_income": 90564.2,
+            "total_expense": 75572.82,
+            "net": 14991.38,
+            "top_category_by_spend": "rent",
+            "top_category_spend": 22703.2,
+            "top5_categories": [
+              {
+                "category": "rent",
+                "spend": 22703.2
+              },
+              {
+                "category": "shopping",
+                "spend": 9175.33
+              },
+              {
+                "category": "groceries",
+                "spend": 9141.71
+              },
+              {
+                "category": "travel",
+                "spend": 8309.94
+              },
+              {
+                "category": "restaurants",
+                "spend": 6242.68
+              }
+            ],
+            "by_category_spend": {
+              "rent": 22703.2,
+              "shopping": 9175.33,
+              "groceries": 9141.71,
+              "travel": 8309.94,
+              "restaurants": 6242.68,
+              "education": 4105.17,
+              "healthcare": 3526.17,
+              "entertainment": 2755.51,
+              "utilities": 2490.27,
+              "transport": 1988.44,
+              "subscriptions": 1785.82,
+              "insurance": 1550.85,
+              "gifts": 1191.67,
+              "coffee": 606.06
+            },
+            "by_month_spend": {
+              "2025-03": 3429.37,
+              "2025-04": 4409.05,
+              "2025-05": 3646.05,
+              "2025-06": 4574.15,
+              "2025-07": 4391.92,
+              "2025-08": 5615.54,
+              "2025-09": 4657.28,
+              "2025-10": 4203.69,
+              "2025-11": 4071.99,
+              "2025-12": 4052.28,
+              "2026-01": 4669.94,
+              "2026-02": 2899.51,
+              "2026-03": 4030.58,
+              "2026-04": 4029.57,
+              "2026-05": 4250.42,
+              "2026-06": 3977.06,
+              "2026-07": 3095.87,
+              "2026-08": 3353.98,
+              "2026-09": 2214.57
+            },
+            "by_month_income": {
+              "2025-03": 3243.94,
+              "2025-04": 4434.09,
+              "2025-05": 5189.81,
+              "2025-06": 4437.05,
+              "2025-07": 4459.41,
+              "2025-08": 5029.3,
+              "2025-09": 3587.23,
+              "2025-10": 5527.49,
+              "2025-11": 5904.04,
+              "2025-12": 5246.65,
+              "2026-01": 4824.61,
+              "2026-02": 6469.36,
+              "2026-03": 5576.93,
+              "2026-04": 4027.13,
+              "2026-05": 4569.16,
+              "2026-06": 4294.81,
+              "2026-07": 5080.61,
+              "2026-08": 5417.78,
+              "2026-09": 3244.8
+            },
+            "by_account_net": {
+              "main": 6459.72,
+              "credit": -8403.5,
+              "savings": 16935.16
+            },
+            "largest_expense": {
+              "name": "apartment rent",
+              "value": -1213.9,
+              "date": "2025-12-03",
+              "category": "rent"
+            },
+            "n_subscriptions": 5
+          }
+        },
+        "total_expense": {
+          "ok": false,
+          "reason": "missing_pred",
+          "gold": {
+            "n_transactions": 1000,
+            "n_income": 58,
+            "n_expense": 942,
+            "total_income": 90564.2,
+            "total_expense": 75572.82,
+            "net": 14991.38,
+            "top_category_by_spend": "rent",
+            "top_category_spend": 22703.2,
+            "top5_categories": [
+              {
+                "category": "rent",
+                "spend": 22703.2
+              },
+              {
+                "category": "shopping",
+                "spend": 9175.33
+              },
+              {
+                "category": "groceries",
+                "spend": 9141.71
+              },
+              {
+                "category": "travel",
+                "spend": 8309.94
+              },
+              {
+                "category": "restaurants",
+                "spend": 6242.68
+              }
+            ],
+            "by_category_spend": {
+              "rent": 22703.2,
+              "shopping": 9175.33,
+              "groceries": 9141.71,
+              "travel": 8309.94,
+              "restaurants": 6242.68,
+              "education": 4105.17,
+              "healthcare": 3526.17,
+              "entertainment": 2755.51,
+              "utilities": 2490.27,
+              "transport": 1988.44,
+              "subscriptions": 1785.82,
+              "insurance": 1550.85,
+              "gifts": 1191.67,
+              "coffee": 606.06
+            },
+            "by_month_spend": {
+              "2025-03": 3429.37,
+              "2025-04": 4409.05,
+              "2025-05": 3646.05,
+              "2025-06": 4574.15,
+              "2025-07": 4391.92,
+              "2025-08": 5615.54,
+              "2025-09": 4657.28,
+              "2025-10": 4203.69,
+              "2025-11": 4071.99,
+              "2025-12": 4052.28,
+              "2026-01": 4669.94,
+              "2026-02": 2899.51,
+              "2026-03": 4030.58,
+              "2026-04": 4029.57,
+              "2026-05": 4250.42,
+              "2026-06": 3977.06,
+              "2026-07": 3095.87,
+              "2026-08": 3353.98,
+              "2026-09": 2214.57
+            },
+            "by_month_income": {
+              "2025-03": 3243.94,
+              "2025-04": 4434.09,
+              "2025-05": 5189.81,
+              "2025-06": 4437.05,
+              "2025-07": 4459.41,
+              "2025-08": 5029.3,
+              "2025-09": 3587.23,
+              "2025-10": 5527.49,
+              "2025-11": 5904.04,
+              "2025-12": 5246.65,
+              "2026-01": 4824.61,
+              "2026-02": 6469.36,
+              "2026-03": 5576.93,
+              "2026-04": 4027.13,
+              "2026-05": 4569.16,
+              "2026-06": 4294.81,
+              "2026-07": 5080.61,
+              "2026-08": 5417.78,
+              "2026-09": 3244.8
+            },
+            "by_account_net": {
+              "main": 6459.72,
+              "credit": -8403.5,
+              "savings": 16935.16
+            },
+            "largest_expense": {
+              "name": "apartment rent",
+              "value": -1213.9,
+              "date": "2025-12-03",
+              "category": "rent"
+            },
+            "n_subscriptions": 5
+          }
+        },
+        "net": {
+          "ok": false,
+          "reason": "missing_pred",
+          "gold": {
+            "n_transactions": 1000,
+            "n_income": 58,
+            "n_expense": 942,
+            "total_income": 90564.2,
+            "total_expense": 75572.82,
+            "net": 14991.38,
+            "top_category_by_spend": "rent",
+            "top_category_spend": 22703.2,
+            "top5_categories": [
+              {
+                "category": "rent",
+                "spend": 22703.2
+              },
+              {
+                "category": "shopping",
+                "spend": 9175.33
+              },
+              {
+                "category": "groceries",
+                "spend": 9141.71
+              },
+              {
+                "category": "travel",
+                "spend": 8309.94
+              },
+              {
+                "category": "restaurants",
+                "spend": 6242.68
+              }
+            ],
+            "by_category_spend": {
+              "rent": 22703.2,
+              "shopping": 9175.33,
+              "groceries": 9141.71,
+              "travel": 8309.94,
+              "restaurants": 6242.68,
+              "education": 4105.17,
+              "healthcare": 3526.17,
+              "entertainment": 2755.51,
+              "utilities": 2490.27,
+              "transport": 1988.44,
+              "subscriptions": 1785.82,
+              "insurance": 1550.85,
+              "gifts": 1191.67,
+              "coffee": 606.06
+            },
+            "by_month_spend": {
+              "2025-03": 3429.37,
+              "2025-04": 4409.05,
+              "2025-05": 3646.05,
+              "2025-06": 4574.15,
+              "2025-07": 4391.92,
+              "2025-08": 5615.54,
+              "2025-09": 4657.28,
+              "2025-10": 4203.69,
+              "2025-11": 4071.99,
+              "2025-12": 4052.28,
+              "2026-01": 4669.94,
+              "2026-02": 2899.51,
+              "2026-03": 4030.58,
+              "2026-04": 4029.57,
+              "2026-05": 4250.42,
+              "2026-06": 3977.06,
+              "2026-07": 3095.87,
+              "2026-08": 3353.98,
+              "2026-09": 2214.57
+            },
+            "by_month_income": {
+              "2025-03": 3243.94,
+              "2025-04": 4434.09,
+              "2025-05": 5189.81,
+              "2025-06": 4437.05,
+              "2025-07": 4459.41,
+              "2025-08": 5029.3,
+              "2025-09": 3587.23,
+              "2025-10": 5527.49,
+              "2025-11": 5904.04,
+              "2025-12": 5246.65,
+              "2026-01": 4824.61,
+              "2026-02": 6469.36,
+              "2026-03": 5576.93,
+              "2026-04": 4027.13,
+              "2026-05": 4569.16,
+              "2026-06": 4294.81,
+              "2026-07": 5080.61,
+              "2026-08": 5417.78,
+              "2026-09": 3244.8
+            },
+            "by_account_net": {
+              "main": 6459.72,
+              "credit": -8403.5,
+              "savings": 16935.16
+            },
+            "largest_expense": {
+              "name": "apartment rent",
+              "value": -1213.9,
+              "date": "2025-12-03",
+              "category": "rent"
+            },
+            "n_subscriptions": 5
+          }
+        },
+        "top_category": {
+          "ok": false,
+          "reason": "missing_pred"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 5633,
+        "completion_tokens": 640,
+        "cost": 0.00053765
+      },
+      "preview": "",
+      "parsed": {}
+    }
+  ]
+}
