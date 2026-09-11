@@ -63,12 +63,19 @@ def load_all() -> None:
         importlib.import_module(f"experiments.tokenization.codecs.{module.name}")
 
 
-def encode_all(bundle: Bundle, families: Iterable[str] | None = None) -> list[CodecResult]:
+def encode_all(
+    bundle: Bundle,
+    families: Iterable[str] | None = None,
+    names: Iterable[str] | None = None,
+) -> list[CodecResult]:
     load_all()
-    wanted = set(families) if families else None
+    wanted_fam = set(families) if families else None
+    wanted_name = set(names) if names else None
     out: list[CodecResult] = []
     for codec in all_codecs():
-        if wanted is not None and codec.family not in wanted:
+        if wanted_fam is not None and codec.family not in wanted_fam:
+            continue
+        if wanted_name is not None and codec.name not in wanted_name:
             continue
         out.append(codec.encode(bundle))
     return out

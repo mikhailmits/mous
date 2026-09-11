@@ -35,7 +35,7 @@ def run(
     bundle = load_bundle()
     gold = load_gold()
     names = codec_names or VISION_CODECS
-    encoded = {item.name: item for item in encode_all(bundle) if item.name in names}
+    encoded = {item.name: item for item in encode_all(bundle, names=names)}
     results = []
     path = RESULTS / "vision_eval.json"
     for name in names:

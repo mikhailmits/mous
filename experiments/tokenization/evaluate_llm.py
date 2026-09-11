@@ -171,7 +171,7 @@ def run(
     models = models or pick_models(limit=model_limit)
     names = codec_names or LLM_CODECS
     merge = codec_names is not None if merge is None else merge
-    encoded = {item.name: item for item in encode_all(bundle) if item.name in names}
+    encoded = {item.name: item for item in encode_all(bundle, names=names)}
     results = []
     path = RESULTS / "llm_eval.json"
     for model in models:
