@@ -133,10 +133,10 @@ def load_gold() -> dict:
     return json.loads((CORPUS / "gold.json").read_text(encoding="utf-8"))
 
 
-def score_prediction(pred: dict, gold: dict) -> dict:
+def score_prediction(pred: dict, gold: dict, task: str | None = None) -> dict:
     """Numeric + ranking score. Missing keys count as failures, not zeros."""
 
-    def num(path: list[str], tolerance: float = 0.05) -> dict:
+    def num(path: list[str], tolerance: float = 0.05, abs_ok: bool = False) -> dict:
         g = gold
         p = pred
         for key in path:
@@ -151,6 +151,9 @@ def score_prediction(pred: dict, gold: dict) -> dict:
             pf = float(p)
         except (TypeError, ValueError):
             return {"ok": False, "reason": "not_numeric", "gold": g, "pred": p}
+        if abs_ok:
+            pf = abs(pf)
+            gf = abs(gf)
         if gf == 0:
             ok = abs(pf) < 1e-6
             rel = 0.0 if ok else 1.0
@@ -163,29 +166,39 @@ def score_prediction(pred: dict, gold: dict) -> dict:
         g = gold
         p = pred
         for key in path:
+            if not isinstance(g, dict) or key not in g:
+                return {"ok": False, "reason": "missing_gold"}
             if not isinstance(p, dict) or key not in p:
                 return {"ok": False, "reason": "missing_pred"}
             g = g[key]
             p = p[key]
+        if isinstance(g, str) and isinstance(p, str):
+            return {"ok": p.strip().lower() == g.strip().lower(), "gold": g, "pred": p}
         return {"ok": p == g, "gold": g, "pred": p}
 
-    checks = {
-        "n_transactions": num(["reports", "n_transactions"], 0.0),
-        "total_income": num(["reports", "total_income"]),
-        "total_expense": num(["reports", "total_expense"]),
-        "net": num(["reports", "net"]),
-        "top_category": exact(["reports", "top_category_by_spend"]),
-        "next_month_spend": num(["forecasts", "next_month_spend_naive"]),
-        "next_month_income": num(["forecasts", "next_month_income_naive"]),
-        "discretionary_share": num(["optimize", "discretionary_share"]),
-        "best_cut_category": exact(["optimize", "best_single_cut", "category"])
-        if isinstance(pred.get("optimize", {}).get("best_single_cut"), dict)
-        else {"ok": False, "reason": "missing_pred"},
+    catalog = {
+        "n_transactions": lambda: num(["reports", "n_transactions"], 0.0),
+        "total_income": lambda: num(["reports", "total_income"], abs_ok=True),
+        "total_expense": lambda: num(["reports", "total_expense"], abs_ok=True),
+        "net": lambda: num(["reports", "net"]),
+        "top_category": lambda: exact(["reports", "top_category_by_spend"]),
+        "next_month_spend": lambda: num(["forecasts", "next_month_spend_naive"], abs_ok=True),
+        "next_month_income": lambda: num(["forecasts", "next_month_income_naive"], abs_ok=True),
+        "discretionary_share": lambda: num(["optimize", "discretionary_share"], abs_ok=True),
+        "best_cut_category": lambda: exact(["optimize", "best_single_cut", "category"]),
     }
+    by_task = {
+        "reports": ["n_transactions", "total_income", "total_expense", "net", "top_category"],
+        "optimize": ["discretionary_share", "best_cut_category"],
+        "forecasts": ["next_month_spend", "next_month_income"],
+    }
+    names = by_task.get(task or "", list(catalog))
+    checks = {name: catalog[name]() for name in names}
     oks = [1 if item["ok"] else 0 for item in checks.values()]
     return {
         "accuracy": round(sum(oks) / len(oks), 4) if oks else 0.0,
         "passed": int(sum(oks)),
         "total": len(oks),
         "checks": checks,
+        "task": task,
     }

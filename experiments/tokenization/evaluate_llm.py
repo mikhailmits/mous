@@ -16,14 +16,13 @@ from experiments.tokenization.paths import LLM_RAW, RESULTS
 from experiments.tokenization.prompts import SYSTEM_BASE, TASK_PROMPTS, wrap_payload
 
 PREFERRED_MODELS = [
-    "openai/gpt-5-mini",
-    "openai/gpt-4.1-mini",
-    "google/gemini-2.5-flash",
-    "google/gemini-2.0-flash-lite-001",
     "qwen/qwen-2.5-7b-instruct",
-    "deepseek/deepseek-chat",
-    "meta-llama/llama-3.3-70b-instruct",
+    "google/gemini-2.5-flash",
+    "openai/gpt-4.1-mini",
+    "openai/gpt-5-nano",
+    "openai/gpt-5-mini",
 ]
+# Full gpt-5 is a reasoning model (hidden reasoning tokens). Use it sparingly, never as the default bulk judge.
 # Codecs to send to models. Keep this tight — $9 budget.
 LLM_CODECS = [
     "json_pretty",
@@ -100,7 +99,7 @@ def _extract_json(text: str) -> dict:
         return {}
 
 
-def chat(model: str, messages: list[dict], max_tokens: int = 700) -> dict:
+def chat(model: str, messages: list[dict], max_tokens: int = 900) -> dict:
     headers = {
         "Authorization": f"Bearer {_key()}",
         "Content-Type": "application/json",
@@ -129,10 +128,6 @@ def pick_models(limit: int = 3) -> list[str]:
         print(f"model list failed ({exc}); using preferred blindly")
         ids = set(PREFERRED_MODELS)
     chosen = [mid for mid in PREFERRED_MODELS if mid in ids or not ids]
-    # Always try gpt-5 family even if the catalog parse failed.
-    for extra in ("openai/gpt-5-mini", "openai/gpt-5-nano", "openai/gpt-5"):
-        if extra not in chosen:
-            chosen.insert(0, extra)
     # unique preserve order
     seen = set()
     out = []
@@ -183,7 +178,7 @@ def run(model_limit: int = 2, codec_names: list[str] | None = None) -> dict:
                     content = raw["choices"][0]["message"]["content"] or ""
                     usage = raw.get("usage") or {}
                     parsed = _extract_json(content)
-                    score = score_prediction(parsed, gold)
+                    score = score_prediction(parsed, gold, task=task)
                     record.update(
                         {
                             "ok": True,

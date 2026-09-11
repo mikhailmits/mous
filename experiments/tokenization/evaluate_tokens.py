@@ -27,6 +27,9 @@ def run(families: list[str] | None = None) -> dict:
                 counts[tok.name] = None
                 print(f"count fail {result.name} {tok.name}: {exc}")
         gpt5 = counts.get("openai-gpt-5") or counts.get("openai-o200k_base") or 0
+        vision = None
+        if result.extras.get("openai_high_tokens"):
+            vision = int(result.extras["openai_high_tokens"])
         row = {
             "codec": result.name,
             "family": result.family,
@@ -37,7 +40,9 @@ def run(families: list[str] | None = None) -> dict:
             "image_paths": result.image_paths,
             "extras": result.extras,
             "tokens": counts,
-            "gpt5_tokens": gpt5,
+            "gpt5_text_tokens": gpt5,
+            "gpt5_vision_tokens": vision,
+            "gpt5_tokens": vision if vision is not None else gpt5,
         }
         rows.append(row)
         print(f"{result.name:28} family={result.family:10} chars={len(payload):7} gpt5={gpt5}")

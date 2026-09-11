@@ -33,6 +33,7 @@ Spend magnitude is positive. total_expense is the sum of -value for expenses.
 OPTIMIZE_USER = """Task: what and how to optimize
 Discretionary categories: restaurants, entertainment, coffee, shopping, travel, gifts.
 Necessary: rent, groceries, transport, utilities, insurance, healthcare.
+discretionary_share is a MONEY total (sum of spend in discretionary categories), not a percentage.
 Return JSON:
 {
   "optimize": {
