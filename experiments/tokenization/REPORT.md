@@ -1,117 +1,96 @@
-# Tokenization lab report
+# What we learned (plain English)
 
-Status: **done**. Five specialists landed. Fair 1000-row OCR is measured and fails. No further fair encoding beats `tiny_ledger_vm` by >3% tokens while holding quality. Ship pre-aggregated tool views, not 1000 raw rows.
+We built a fake bank account with **1000 purchases and paychecks**. Then we asked an AI three questions:
 
-## Setup
+1. **Reports:** How much came in, how much went out, what’s left, and what category ate the most money?
+2. **Optimize:** If you cut one optional habit, which one saves the most? (Shopping.)
+3. **Forecast:** Roughly, what will next month look like? (Average of the last 3 months.)
 
-- 1000 transactions on `127.0.0.1:8000` (live export matches gold).
-- Gold: income **90564.20**, expense **75572.82**, net **14991.38**, top **rent** 22703.20, best cut **shopping**, next-month spend **2888.14** / income **4581.06** (mean of last 3 months: 2026-07, 2026-08, 2026-09).
-- GPT-5* tokenizer: tiktoken **`o200k_base`**. Pretty JSON = **55,614** tokens. **119+ codecs** on the leaderboard.
+The real answers (from the database, not the AI):
 
-## What to ship (diagram)
+- In: **€90,564.20**
+- Out: **€75,572.82**
+- Left over: **€14,991.38**
+- Biggest spend category: **rent** (€22,703.20)
+- Best place to cut: **shopping**
+- Next month (naive guess): spend **€2,888.14**, income **€4,581.06**
 
-`input → agent + tools → reports / optimize / forecasts`
+## Words in this report, once
 
-Tools must pre-aggregate. Small models cannot add 1000 amounts **or** 16 category totals. Put the answer fields in the tool payload.
+- **Token** = a bite-sized piece of text the AI is billed for. More tokens = more money and a longer prompt. We counted with the same system ChatGPT-5 uses.
+- **“Way of writing the ledger”** = we rewrote the same 1000 rows many times (shorter dates, no spaces, Chinese labels, a zip file, a screenshot, …) to see which writing is cheapest.
+- **Qwen** = a small, cheap AI. **Gemini** = a stronger (and vision-capable) AI.
+- **Score 1.00** = it got every check right. **0** = it got them all wrong.
 
-| encoding | GPT-5 tokens | quality | role |
-| --- | ---: | --- | --- |
-| **`tool_copy`** | **196** | **1.00 Qwen** (exact) | **ship this to 7b-class models** |
-| slim `tool_views` (live API, last-3) | 651 | 1.00 Qwen | same idea, extra tool dumps |
-| `aggregates_only` | 709 | 0.83 Qwen | fatter JSON; `discretionary_share` misread as a percent |
-| **`tool_rollup`** | **378** | **1.00 Gemini** / 0.4–0.0–1.0 Qwen | honest GROUP BY; Python reconstructs gold |
-| `tool_rollup_ranked` | 378 | Qwen 0.6 / 0.5 / 0.5 | sorting helps argmax, not sums |
-| **`img_monthly_table`** | **255 tiles** | **1.00 Gemini** | vision analog of tool views |
-| `img_summary_card` | 255 tiles | reports 1.0, forecasts 0 | too cramped |
-| fair 1000-row text (`tiny_ledger_vm`) | 5,123 | ~0 | Python-summable; models cannot add |
-| fair 1000-row image (`img_4col_1bit`) | 765 tiles | 0.07 Gemini | n=1000 only; invented round money |
-| gzip+base64 | 7,863 | 0.00 | unreadable |
+## The whole experiment in one sentence
 
-**7b-class:** return the three task JSON blobs (`tool_copy`). Copy, do not re-sum.
+**Don’t send the AI 1000 raw bank rows. Have the app add the numbers first, then send the tiny summary. A small AI copies that summary perfectly. It cannot add 1000 amounts, and it cannot even add 16 category totals.**
 
-**Gemini-class:** category + last-3 GROUP BYs (`tool_rollup`, 378 tokens) score 1.0 under the 5% numeric band. Expense was 75023.28 vs gold 75572.82 (0.73% low). For exact money, still prefer `tool_copy`.
+Normal pretty JSON of all 1000 rows costs **55,614 tokens**. The tiny summary (`tool_copy`) costs **196 tokens** and Qwen scored **100%**.
 
-Do **not** dump 19 months of spend. Qwen re-averages history and misses the last-3 forecast (2888 → 4072).
+## What to actually ship
 
-## Fair reversible line items (still ~5.1k, still ~0 quality)
+Mous already has an API. The agent should call tools like “spend by category” and “last 3 months,” then hand the model a short answer sheet:
 
-Unchanged cluster: `tiny_ledger_vm` **5,123** / `group_cat_name_daynum` **5,125** / `freq_daypack` **5,170**. Half of `yaml_like` **12,020**. No new fair codec is both cheaper than 12,020 **and** closer to `aggregates_only` accuracy.
+```
+n = 1000
+in = 90564.20
+out = 75572.82
+top = rent
+cut = shopping
+next month spend ≈ 2888.14
+```
 
-`dsl_cat_month` (5,230, not row-reversible) reconstructs gold in Python and got **0.4** reports on gpt-4.1-mini after `n=1000`. Compact DSL does not fix arithmetic.
+That answer sheet is **`tool_copy`**. Qwen copied it with **zero errors**.
 
-### (a) Spaces
+If you also dump *every* past month into the prompt, the small AI averages the wrong months and forecasts **€4,072** instead of **€2,888**. Only send the **last 3 months**.
 
-Keep ASCII spaces. YYMMDD + integer cents + group-by-category/merchant + omit default `eur`/`main`. Glue / delete / NBSP / `▁` **increase** o200k tokens (`sticky_amount_no_space` 17,534 vs `line_natural` 15,925).
+## Scoreboard
 
-### (b) Symbols
-
-ASCII space wins. `|`, tab, `·`, unit-separator, SentencePiece `▁` all lose.
-
-### (c) Languages
-
-Translating labels only is weak; full-name CJK often worse. Structural win: `lang_ko_ideo_monthly` **7,240**, `lang_ideo_monthly` **7,273**, `lang_ja_ideo_monthly` **7,281**. Still behind the English grouped DSLs at ~5.1k. Monthly header + one 1-token glyph per category is the trick, not “write it in Chinese.”
-
-### (d) Compression / crypto
-
-Readable `tiny_ledger_vm` / `freq_daypack` beat gzip on tokens **and** stay ledgers. gzip+b64 **7,863** tokens, accuracy **0**. Hex / XOR are 40k+ and opaque.
-
-### (e) Images — fair 1000-row OCR is now measured
-
-Tile formula: `85 + 170 * ceil(w/512)*ceil(h/512)` after the 2048/768 rescale. Do **not** quote `[image …]` text stubs.
-
-Tall 360×9004 PNG = 765 tiles and ~2px glyphs after scale: **do not use**.
-
-Native packings (specialist 4):
-
-| codec | tiles | high tokens | glyph | Gemini 3-task acc |
-| --- | ---: | ---: | --- | --- |
-| `img_1tile_micro` | 1 | 255 | ~4px / 10-col | not scored (unreadable) |
-| `img_2tile_compact` | 2 | **425** | ~6px / 6-col | **0.4 / 0.5 / 0.0** |
-| `img_4col_1bit` | 4 | **765** | ~8px / 4-col | **0.2 / 0.0 / 0.0** |
-| `img_monthly_table` | 1 | **255** | pre-aggregated | **1.0 / 1.0 / 1.0** |
-| `img_summary_card` | 1 | 255 | gold card | reports 1.0, forecasts 0 |
-| four 512² splits | 4×1 | **1020** | same 8px | not scored (strictly more tokens) |
-
-**Official task eval (Gemini 2.5 Flash):**
-
-- `img_4col_1bit`: n=1000 only (and the prompt mentions 1000). Expense invented as 32027.90, top=`groc`, forecasts −1000 / 3200. Native 8px is **not** enough to sum 942 expenses.
-- `img_2tile_compact`: n=1000 + guessed `top=rent` / `best_cut=shopping` with fake round amounts (income 100000, disc_share 200). Category names are in the legend; the arithmetic is not OCR.
-
-Specialist one-shot probe on the same 4-col PNG: n=1000, top=rent, expense **59999.99** vs 75572.82. Same conclusion: structure is visible, sums are not.
-
-Low-detail (85 tokens) squashes 2048→512 and repeats the tall-PNG failure. Splitting images pays the 85-token base per image and **loses**.
-
-### (x) Novel / prompts / context engineering
-
-- `n=` in the legend helps count, not sums.
-- Compact eight-field prompt is <400 tokens; the ledger still dominates.
-- Extra history in context **hurts** forecasts.
-- Sorting GROUP-BY maps high-to-low (`tool_rollup_ranked`) lets Qwen copy the first key (rent, shopping) but it still summed ~half the categories (37778 vs 75572). **Argmax ≠ addition.**
-- Qwen 7b **can** average three monthly numbers (`tool_rollup` forecasts 1.0) and **cannot** reliably sum ~16 category totals or 1000 rows.
-
-## Architecture finding
-
-Python on `tool_rollup` reconstructs every gold task field. The failure is the model, not the encoding.
-
-| who | what they can do | what they cannot do |
+| What we sent the AI | How big? | Did the AI get the money right? |
 | --- | --- | --- |
-| Python / tools | sum 1000 rows, GROUP BY, last-3 mean | — |
-| Qwen 2.5 7b | copy JSON; mean of 3 numbers | sum 16 categories; OCR 1000 rows |
-| Gemini 2.5 Flash | copy JSON; argmax + mean of 3; ~0.7% sum of 16 | OCR 1000 painted rows |
+| **Short answer sheet** (`tool_copy`) | **196** tokens | **Yes — 100%** (Qwen copied it) |
+| Same idea, extra API junk included (`tool_views`) | 651 tokens | Yes — 100% |
+| Category totals + last 3 months, AI must still add (`tool_rollup`) | 378 tokens | Gemini: yes (expense off by 0.7%). Qwen: **no**, it can’t add 16 numbers |
+| Picture of a monthly/category **table** | 255 image-units | Gemini: **100%** |
+| All 1000 rows, written as compact as we could | ~5,123 tokens | **No.** Python can add them. The AI cannot. |
+| All 1000 rows **drawn as a picture** | 765 image-units | **No.** Gemini sees “1000 rows” and invents round numbers. |
+| Zipped + encoded as gibberish (`gzip`) | 7,863 tokens | **No.** 0%. The AI can’t read it. |
 
-So the agent should call `list_categories` / `get_spent(last3)` / `get_income(last3)` / `list_subscriptions` **and** have the tool layer emit the reports/optimize/forecasts objects. Do not stuff `list_transactions` (1000 rows) into a small model.
+So: **cheap and correct = send the summary. Cheap and wrong = zip file or a screenshot of 1000 lines. Expensive and still wrong = pretty JSON of every row.**
 
-## Files
+## Weird tricks we tried (and what happened)
 
-- Codecs: `codecs/extra_{spaces,compress,dsl,lang,images,tick}.py`
-- Live agent: `agent_api.py` (HTTP tools → slim tool_views → model)
-- Vision: `agent_vision.py --fair-ocr`, `results/vision_eval.json`
-- Specialist notes: `results/subagents/{spaces,compress,dsl,images,languages}.md`
-- Leaderboard: `results/leaderboard.md` (120 codecs)
+We tried every compression idea people usually suggest.
 
-## Why the loop stops
+**Taking out spaces.** Makes GPT-5 *more* expensive, not less. The model likes normal spaces. Short dates (`250301` instead of `2025-03-01`) and amounts in cents (`-118100`) *do* help.
 
-- Specialists finished (notes on disk).
-- Families (a)–(e) and (x) are measured, including fair 1000-row OCR.
-- No new **fair reversible** codec is both >3% cheaper than the 5.1k cluster **and** closer to tool-view accuracy.
-- Production recommendation is stable: **tools pre-aggregate; 7b copies `tool_copy` (196); Gemini may compute from `tool_rollup` (378) or OCR `img_monthly_table` (255); never send 1000 raw rows.**
+**Replacing spaces with `|` or fancy dots.** Worse than a normal space.
+
+**Writing it in Chinese / Korean / Japanese.** Translating the word “groceries” barely matters. Dates and numbers eat most of the budget. The best language trick (one cheap character per category, grouped by month) still costs **~7,240 tokens** — better than 12,000, worse than the 5,100-token English packing, and the AI still can’t add.
+
+**Zip / encrypt.** Fewer *bytes*, but the AI sees alphabet soup. Score: 0.
+
+**Turn the ledger into a picture.** A tall 1000-line screenshot looks cheap on paper (same cost as a packed grid) but the letters get crushed to ~2 pixels. A carefully packed 4-column grid keeps letters ~8 pixels tall. Gemini can *see* there are 1000 rows and that rent is big. It **cannot** add 942 expenses from the pixels. A picture of the **already-summed table** works (100%). A picture of all 1000 lines does not.
+
+**A custom shorthand for finance.** We got the 1000 rows down to ~5,100 tokens. A Python script can decode it and match the real totals. The AI still guesses.
+
+## Who can do the math?
+
+| Who | Can do | Cannot do |
+| --- | --- | --- |
+| The app / database | Add 1000 rows, group by category, average last 3 months | — |
+| Small AI (Qwen) | Copy a summary; average **3** numbers | Add 16 category totals; read 1000 rows from text or a picture |
+| Stronger AI (Gemini) | Copy a summary; pick the biggest category; average 3 months; almost add 16 totals | Read 1000 rows off a picture |
+
+## Bottom line
+
+Build this:
+
+**bank data → app adds it up → AI writes the three answers**
+
+Not this:
+
+**bank data → paste 1000 rows (or a screenshot of them) into the AI → hope it adds**
+
+The lab is finished. 120 ways of writing the ledger later, none of the “keep all 1000 rows” versions beat “let the app add first” on both cost *and* correctness.
