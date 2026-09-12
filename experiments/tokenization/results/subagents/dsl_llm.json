@@ -1,0 +1,157 @@
+{
+  "task": "reports",
+  "prompt": "SYSTEM_COMPACT + REPORTS_EIGHT_USER + ignore_rest",
+  "spend_usd": 0.046889,
+  "note": "Did not overwrite results/llm_eval.json. gpt-5-nano returned empty content (reasoning used max_tokens) and is omitted.",
+  "results": [
+    {
+      "model": "google/gemini-2.5-flash",
+      "codec": "yaml_like",
+      "ok": true,
+      "accuracy": 0.2,
+      "passed": 1,
+      "total": 5,
+      "prompt_tokens": 15289,
+      "completion_tokens": 90,
+      "cost": 0.0048,
+      "parsed": {
+        "n_transactions": 1000,
+        "total_income": 69000.09,
+        "total_expense": 109000.09,
+        "net": -40000.0,
+        "top_category_by_spend": "groceries"
+      }
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "codec": "dsl_cat_month",
+      "ok": true,
+      "accuracy": 0.2,
+      "passed": 1,
+      "total": 5,
+      "prompt_tokens": 8074,
+      "completion_tokens": 95,
+      "cost": 0.0027,
+      "parsed": {
+        "n_transactions": 1099,
+        "total_income": 60000.0,
+        "total_expense": 49000.0,
+        "net": 11000.0,
+        "top_category_by_spend": "rent"
+      }
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "codec": "json_compact",
+      "ok": true,
+      "accuracy": 0.2,
+      "passed": 1,
+      "total": 5,
+      "prompt_tokens": 40413,
+      "completion_tokens": 90,
+      "cost": 0.0123,
+      "parsed": {
+        "n_transactions": 400,
+        "total_income": 29999.07,
+        "total_expense": 30000.06,
+        "net": -0.99,
+        "top_category_by_spend": "rent"
+      }
+    },
+    {
+      "model": "openai/gpt-4.1-mini",
+      "codec": "yaml_like",
+      "ok": true,
+      "accuracy": 0.2,
+      "passed": 1,
+      "total": 5,
+      "prompt_tokens": 12347,
+      "completion_tokens": 64,
+      "cost": 0.005,
+      "parsed": {
+        "n_transactions": 1023,
+        "total_income": 34302.99,
+        "total_expense": 55388.88,
+        "net": -21085.89,
+        "top_category_by_spend": "rent"
+      }
+    },
+    {
+      "model": "openai/gpt-4.1-mini",
+      "codec": "dsl_cat_month",
+      "note": "before n= header",
+      "ok": true,
+      "accuracy": 0.2,
+      "passed": 1,
+      "total": 5,
+      "prompt_tokens": 5634,
+      "completion_tokens": 64,
+      "cost": 0.0024,
+      "parsed": {
+        "n_transactions": 1023,
+        "total_income": 29288.91,
+        "total_expense": 63388.88,
+        "net": -34099.97,
+        "top_category_by_spend": "rent"
+      }
+    },
+    {
+      "model": "openai/gpt-4.1-mini",
+      "codec": "dsl_cat_idx",
+      "ok": true,
+      "accuracy": 0.2,
+      "passed": 1,
+      "total": 5,
+      "prompt_tokens": 5267,
+      "completion_tokens": 63,
+      "cost": 0.0022,
+      "parsed": {
+        "n_transactions": 579,
+        "total_income": 23888.88,
+        "total_expense": 50288.88,
+        "net": -26400.0,
+        "top_category_by_spend": "rent"
+      }
+    },
+    {
+      "model": "openai/gpt-4.1-mini",
+      "codec": "json_compact",
+      "ok": true,
+      "accuracy": 0.2,
+      "passed": 1,
+      "total": 5,
+      "prompt_tokens": 34879,
+      "completion_tokens": 64,
+      "cost": 0.0141,
+      "parsed": {
+        "n_transactions": 1023,
+        "total_income": 41488.99,
+        "total_expense": 69388.88,
+        "net": -27899.89,
+        "top_category_by_spend": "rent"
+      }
+    },
+    {
+      "model": "openai/gpt-4.1-mini",
+      "codec": "dsl_cat_month",
+      "note": "after n=1000 header + income-first category order",
+      "ok": true,
+      "accuracy": 0.4,
+      "passed": 2,
+      "total": 5,
+      "prompt_tokens": 5626,
+      "completion_tokens": 64,
+      "cost": 0.002353,
+      "parsed": {
+        "n_transactions": 1000,
+        "n_income": 38,
+        "n_expense": 962,
+        "total_income": 46294.88,
+        "total_expense": 65288.88,
+        "net": -18994.0,
+        "top_category_by_spend": "rent",
+        "top_category_spend": 22888.88
+      }
+    }
+  ]
+}
