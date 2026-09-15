@@ -26,32 +26,22 @@ final class SpendTipChrome {
 struct SpendTipHost: View {
     @Bindable var store: AppStore
     @Bindable var chrome: SpendTipChrome
+    @Bindable var commandHints: CommandHintState
     var onHover: (Bool) -> Void
     var onSizeChange: (CGSize) -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         SpendTipCard(
-            title: chrome.kind == .expensive ? "Most expensive" : "History",
-            emptyText: chrome.kind == .expensive
-                ? "Nothing spent this month."
-                : "Nothing yet this month.",
-            lines: chrome.kind == .expensive
-                ? store.expensiveMonthRows.map {
-                    SpendTipLine(id: $0.id, signedValue: $0.signedValue, title: $0.title, civilDate: $0.civilDate)
-                }
-                : store.monthTransactions.map {
-                    SpendTipLine(
-                        id: String($0.id),
-                        signedValue: $0.signedValue,
-                        title: $0.description,
-                        civilDate: $0.civilDate
-                    )
-                },
+            title: chrome.kind.title,
+            emptyText: chrome.kind.emptyText,
+            lines: chrome.kind.lines(from: store),
+            currencyCode: store.displayCurrencyCode,
             maxHeight: chrome.maxHeight,
             edge: chrome.edge,
             appeared: chrome.appeared,
             reduceMotion: reduceMotion,
+            showExpandHint: commandHints.visible,
             onHover: onHover,
             onSizeChange: onSizeChange
         )
@@ -66,11 +56,70 @@ struct SpendTipHost: View {
     }
 }
 
+/// In-place list that replaces the dashboard + entry at the same size.
+struct FocusedSpendList: View {
+    @Bindable var store: AppStore
+    var kind: DashboardTipKind
+    var height: CGFloat
+    var showCommandHints: Bool
+    var reduceMotion: Bool
+
+    var body: some View {
+        ScrollView(.vertical) {
+            SpendTipList(
+                title: kind.title,
+                emptyText: kind.emptyText,
+                lines: kind.lines(from: store),
+                currencyCode: store.displayCurrencyCode,
+                appeared: true,
+                reduceMotion: reduceMotion,
+                compact: false,
+                showExpandHint: showCommandHints
+            )
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .scrollIndicators(.hidden)
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(width: MousPopup.cardWidth, height: max(height, 44), alignment: .top)
+        .mousCard()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(kind.title)
+        .accessibilityHint("Command F returns to the dashboard.")
+    }
+}
+
 struct SpendTipLine: Identifiable, Equatable {
     var id: String
     var signedValue: Double
     var title: String
     var civilDate: CivilDate?
+}
+
+extension DashboardTipKind {
+    var title: String { self == .expensive ? "Most expensive" : "History" }
+    var emptyText: String {
+        self == .expensive ? "Nothing spent this month." : "Nothing yet this month."
+    }
+
+    @MainActor
+    func lines(from store: AppStore) -> [SpendTipLine] {
+        switch self {
+        case .expensive:
+            store.expensiveMonthRows.map {
+                SpendTipLine(id: $0.id, signedValue: $0.signedValue, title: $0.title, civilDate: $0.civilDate)
+            }
+        case .monthSpend:
+            store.monthTransactions.map {
+                SpendTipLine(
+                    id: String($0.id),
+                    signedValue: store.displayedAmount($0.signedValue, currencyID: $0.currencyID),
+                    title: $0.description,
+                    civilDate: $0.civilDate
+                )
+            }
+        }
+    }
 }
 
 /// Month ledger in a compact card. Height hugs content up to `maxHeight`,
@@ -83,16 +132,18 @@ struct SpendTipCard: View {
     var title: String
     var emptyText: String = "Nothing yet this month."
     var lines: [SpendTipLine]
+    var currencyCode: String
     var maxHeight: CGFloat
     var edge: SpendTipEdge
     var appeared: Bool
     var reduceMotion: Bool
+    var showExpandHint: Bool
     var onHover: (Bool) -> Void
     var onSizeChange: (CGSize) -> Void
 
     @State private var contentHeight: CGFloat = 0
 
-    private static let width: CGFloat = 244
+    static let compactWidth: CGFloat = 244
     private static let innerPadding: CGFloat = 14
     /// Room for the card's own shadow so it isn't clipped by the panel.
     static let shadowMargin: CGFloat = 20
@@ -100,18 +151,27 @@ struct SpendTipCard: View {
     var body: some View {
         let innerHeight = min(max(contentHeight, 44), max(maxHeight, 44))
         ScrollView(.vertical) {
-            list
-                .padding(Self.innerPadding)
-                .frame(width: Self.width, alignment: .leading)
-                .background(
-                    GeometryReader { proxy in
-                        Color.clear.preference(key: TipHeightKey.self, value: proxy.size.height)
-                    }
-                )
+            SpendTipList(
+                title: title,
+                emptyText: emptyText,
+                lines: lines,
+                currencyCode: currencyCode,
+                appeared: appeared,
+                reduceMotion: reduceMotion,
+                compact: true,
+                showExpandHint: showExpandHint
+            )
+            .padding(Self.innerPadding)
+            .frame(width: Self.compactWidth, alignment: .leading)
+            .background(
+                GeometryReader { proxy in
+                    Color.clear.preference(key: TipHeightKey.self, value: proxy.size.height)
+                }
+            )
         }
         .scrollIndicators(.hidden)
         .scrollBounceBehavior(.basedOnSize)
-        .frame(width: Self.width, height: innerHeight, alignment: .top)
+        .frame(width: Self.compactWidth, height: innerHeight, alignment: .top)
         .mousCard()
         .padding(Self.shadowMargin)
         .contentShape(Rectangle())
@@ -128,20 +188,49 @@ struct SpendTipCard: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)
+        .accessibilityHint("Command F shows the full list.")
     }
 
-    @ViewBuilder
-    private var list: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(.callout.weight(.medium))
-                .foregroundStyle(.secondary)
+    private var accessibilityText: String {
+        if lines.isEmpty { return emptyText }
+        let heading = "\(title). "
+        let rows = lines.map { line in
+            var text = "\(line.signedValue.formatted(SpendTipList.signedMoney(currencyCode))) \(line.title)"
+            if let date = line.civilDate {
+                text += " on \(SpendTipList.dayTitle(date))"
+            }
+            return text
+        }
+        return heading + rows.joined(separator: ", ")
+    }
+}
+
+struct SpendTipList: View {
+    var title: String
+    var emptyText: String
+    var lines: [SpendTipLine]
+    var currencyCode: String
+    var appeared: Bool
+    var reduceMotion: Bool
+    var compact: Bool
+    var showExpandHint: Bool
+    @Environment(\.mousAccent) private var mousAccent
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: compact ? 10 : 12) {
+            HStack(alignment: .center, spacing: 8) {
+                Text(title)
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                CommandKeycap(letter: "f", visible: showExpandHint, reduceMotion: reduceMotion)
+            }
             if lines.isEmpty {
                 Text(emptyText)
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: compact ? 8 : 10) {
                     rows(lines)
                 }
             }
@@ -169,16 +258,16 @@ struct SpendTipCard: View {
 
     private func row(_ line: SpendTipLine, showDate: Bool) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(line.signedValue, format: Self.signedEUR)
+            Text(line.signedValue, format: Self.signedMoney(currencyCode))
                 .font(.callout.weight(.medium))
                 .monospacedDigit()
-                .foregroundStyle(line.signedValue > 0 ? AnyShapeStyle(Color.green.opacity(0.5)) : AnyShapeStyle(.primary))
+                .foregroundStyle(line.signedValue > 0 ? AnyShapeStyle(mousAccent) : AnyShapeStyle(.primary))
                 .layoutPriority(1)
             if !line.title.isEmpty {
                 Text(line.title)
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .lineLimit(compact ? 1 : 2)
                     .truncationMode(.tail)
             }
             Spacer(minLength: 8)
@@ -192,7 +281,7 @@ struct SpendTipCard: View {
         }
     }
 
-    private static func dayTitle(_ date: CivilDate) -> String {
+    static func dayTitle(_ date: CivilDate) -> String {
         if date == CivilDate.localToday() { return "Today" }
         let calendar = Calendar.current
         guard let day = calendar.date(from: DateComponents(year: date.year, month: date.month, day: date.day)) else {
@@ -202,22 +291,11 @@ struct SpendTipCard: View {
         return day.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
     }
 
-    private var accessibilityText: String {
-        if lines.isEmpty { return emptyText }
-        let heading = "\(title). "
-        let rows = lines.map { line in
-            var text = "\(line.signedValue.formatted(Self.signedEUR)) \(line.title)"
-            if let date = line.civilDate {
-                text += " on \(Self.dayTitle(date))"
-            }
-            return text
-        }
-        return heading + rows.joined(separator: ", ")
+    static func signedMoney(_ code: String) -> FloatingPointFormatStyle<Double>.Currency {
+        FloatingPointFormatStyle<Double>.Currency(code: code)
+            .precision(.fractionLength(2))
+            .sign(strategy: .always(showZero: false))
     }
-
-    private static let signedEUR = FloatingPointFormatStyle<Double>.Currency(code: "EUR")
-        .precision(.fractionLength(2))
-        .sign(strategy: .always(showZero: false))
 }
 
 private struct TipHeightKey: PreferenceKey {

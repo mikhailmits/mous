@@ -19,15 +19,23 @@ private nonisolated(unsafe) var delegateKey: UInt8 = 0
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let store = AppStore()
+    private var store: AppStore!
     private var panel: BorderlessPanelController?
+    private var reportMonitor: SummaryReportMonitor?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
-        applySourceTreeDockIconIfNeeded()
         LocalBackend.shared.kickoff()
-        let panel = BorderlessPanelController(store: store)
+        MousAppearance.apply(MousConfigFile.load().theme)
+        store = AppStore(client: APIClient(baseURL: LocalBackend.apiBaseURL()))
+        let reportNotice = ReportNoticeChrome()
+        let panel = BorderlessPanelController(store: store, reportNotice: reportNotice)
         self.panel = panel
+        let monitor = SummaryReportMonitor(notice: reportNotice) { [weak self] in
+            self?.panel?.openFromReportAlert()
+        }
+        reportMonitor = monitor
+        monitor.start()
         panel.show()
         if LocalBackend.shared.isBundled {
             Task { @MainActor [weak self] in
@@ -40,14 +48,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        reportMonitor?.stop()
         LocalBackend.shared.stop()
-    }
-
-    /// `swift run` / `mous dev` are a bare binary, so the Dock would otherwise
-    /// show a generic icon. The bundled .app uses `Icon/AppIcon.icns` via Info.plist.
-    private func applySourceTreeDockIconIfNeeded() {
-        guard !LocalBackend.shared.isBundled, let image = MousIcons.appIcon else { return }
-        NSApp.applicationIconImage = image
     }
 
     /// Screenshot/demo mode, driven by environment variables:

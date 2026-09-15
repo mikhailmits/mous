@@ -19,6 +19,8 @@ final class LocalBackend {
     /// Spawn the helper immediately so boot overlaps window setup.
     func kickoff() {
         guard isBundled else { return }
+        MousConfigFile.ensure()
+        Self.installCommandLineTool()
         if startTask == nil {
             startTask = Task { await self.runStart() }
         }
@@ -112,9 +114,7 @@ final class LocalBackend {
     }
 
     private static func supportDirectory() -> URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
-        let dir = base.appendingPathComponent("mous", isDirectory: true)
+        let dir = MousConfigFile.directory()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
@@ -122,14 +122,28 @@ final class LocalBackend {
     private static func childEnvironment() -> [String: String] {
         var env = ProcessInfo.processInfo.environment
         let support = supportDirectory()
-        let db = support.appendingPathComponent("data.db")
-        env["MOUS_DATABASE_URL"] = "sqlite:///\(db.path)"
-        env["MOUS_API_HOST"] = "127.0.0.1"
-        env["MOUS_API_PORT"] = "8000"
+        env["MOUS_CONFIG_DIR"] = support.path
         if let resources = Bundle.main.resourceURL {
             env["MOUS_PROJECT_ROOT"] = resources.path
         }
         return env
+    }
+
+    /// `~/.local/bin/mous` → bundled helper. No admin; PATH must include ~/.local/bin.
+    private static func installCommandLineTool() {
+        guard let binary = apiBinaryURL() else { return }
+        let fm = FileManager.default
+        let binDir = fm.homeDirectoryForCurrentUser.appendingPathComponent(".local/bin", isDirectory: true)
+        try? fm.createDirectory(at: binDir, withIntermediateDirectories: true)
+        let link = binDir.appendingPathComponent("mous")
+        let dest = binary.path
+        if let existing = try? fm.destinationOfSymbolicLink(atPath: link.path) {
+            if existing == dest { return }
+            try? fm.removeItem(at: link)
+        } else if fm.fileExists(atPath: link.path) {
+            return
+        }
+        try? fm.createSymbolicLink(atPath: link.path, withDestinationPath: dest)
     }
 
     private static let healthSession: URLSession = {
@@ -144,8 +158,13 @@ final class LocalBackend {
         return URLSession(configuration: config)
     }()
 
+    static func apiBaseURL() -> URL {
+        let cfg = MousConfigFile.load()
+        return URL(string: "http://\(cfg.host):\(cfg.port)") ?? APIClient.defaultBaseURL
+    }
+
     private static func healthOK() async -> Bool {
-        let url = URL(string: "http://127.0.0.1:8000/health")!
+        let url = apiBaseURL().appendingPathComponent("health")
         var request = URLRequest(url: url, timeoutInterval: 0.2)
         request.httpShouldHandleCookies = false
         do {

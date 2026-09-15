@@ -27,5 +27,7 @@
 	</dict>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSUserNotificationsUsageDescription</key>
+	<string>Mous notifies you when a spending report is ready.</string>
 </dict>
 </plist>

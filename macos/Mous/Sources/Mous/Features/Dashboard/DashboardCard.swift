@@ -6,18 +6,26 @@ import SwiftUI
 @MainActor
 final class CommandHintState {
     var visible = false
+    /// In-place list replacing the dashboard. `nil` is the normal home view.
+    var focusedList: DashboardTipKind? = nil
+    var showSettings = false
+    var showNotifications = false
+    var showOptionsMenu = false
 }
 
 struct DashboardCard: View {
     var snapshot: DashboardSnapshot
-    /// True once at least one fetch has succeeded. Until then, amounts show €0.00.
+    /// True once at least one fetch has succeeded. Until then, amounts show 0.00.
     var hasLoaded: Bool
     var isRefreshing: Bool
     var statusMessage: String?
+    /// ISO 4217 code for the Settings currency.
+    var currencyCode: String
     var onSpendHover: (Bool) -> Void = { _ in }
     var onSavedHover: (Bool) -> Void = { _ in }
     var showCommandHints: Bool = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mousAccent) private var mousAccent
     @State private var spendHotspot: CGRect = .zero
 
     var body: some View {
@@ -34,10 +42,6 @@ struct DashboardCard: View {
                     leftLabel
                 }
             }
-            .overlay(alignment: .topLeading) {
-                CommandKeycap(letter: "m", visible: showCommandHints, reduceMotion: reduceMotion)
-                    .offset(x: -44, y: -2)
-            }
             HStack(alignment: .firstTextBaseline) {
                 HStack(alignment: .firstTextBaseline, spacing: 5) {
                     Text("Spent this month.")
@@ -49,10 +53,6 @@ struct DashboardCard: View {
                 .spendHotspot()
                 Spacer(minLength: 12)
                 savedLabel
-                    .overlay(alignment: .leading) {
-                        CommandKeycap(letter: "x", visible: showCommandHints, reduceMotion: reduceMotion)
-                            .offset(x: -44, y: -2)
-                    }
                     .contentShape(Rectangle())
                     .onHover { onSavedHover($0) }
             }
@@ -80,13 +80,21 @@ struct DashboardCard: View {
                 .onHover { onSpendHover($0) }
         }
         .padding(20)
+        .overlay(alignment: .topLeading) {
+            CommandKeycap(letter: "m", visible: showCommandHints, reduceMotion: reduceMotion)
+                .padding(8)
+        }
+        .overlay(alignment: .bottomTrailing) {
+            CommandKeycap(letter: "x", visible: showCommandHints, reduceMotion: reduceMotion)
+                .padding(8)
+        }
         .frame(maxWidth: .infinity, minHeight: 136, alignment: .topLeading)
         .mousCard()
         .redacted(reason: isRefreshing && !hasLoaded ? .placeholder : [])
         .animation(Self.tickAnimation(reduceMotion: reduceMotion), value: tickToken)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)
-        .accessibilityHint("Command M shows History. Command X shows Most expensive.")
+        .accessibilityHint("Command M shows History. Command X shows Most expensive. Command F expands an open list.")
     }
 
     /// Any visible dashboard change — numbers, load state, or status copy.
@@ -97,7 +105,8 @@ struct DashboardCard: View {
             left: hasLoaded ? snapshot.left : 0,
             saved: hasLoaded ? (snapshot.savedRatio ?? 0) : 0,
             hasLoaded: hasLoaded,
-            status: statusMessage ?? ""
+            status: statusMessage ?? "",
+            currencyCode: currencyCode
         )
     }
 
@@ -108,6 +117,7 @@ struct DashboardCard: View {
         var saved: Double
         var hasLoaded: Bool
         var status: String
+        var currencyCode: String
     }
 
     private static func tickAnimation(reduceMotion: Bool) -> Animation {
@@ -116,7 +126,7 @@ struct DashboardCard: View {
 
     @ViewBuilder
     private var heroValue: some View {
-        Text(displayedSpentToday, format: Self.eur)
+        Text(displayedSpentToday, format: money)
             .font(.system(size: 34, weight: .semibold, design: .rounded))
             .monospacedDigit()
             .foregroundStyle(.primary)
@@ -133,11 +143,11 @@ struct DashboardCard: View {
 
     @ViewBuilder
     private var leftLabel: some View {
-        // Green at 50% opacity is locked; bold rounded weight keeps it readable
-        // against the material at that opacity.
-        Text("\(hasLoaded ? snapshot.left : 0, format: Self.eur) left")
+        // Bold rounded weight keeps the sampled mark color readable
+        // against the material at the themed opacity.
+        Text("\(hasLoaded ? snapshot.left : 0, format: money) left")
             .font(.system(size: 15, weight: .bold, design: .rounded))
-            .foregroundStyle(Color.green.opacity(0.5))
+            .foregroundStyle(mousAccent)
             .monospacedDigit()
             .mousTick(numeric: true, reduceMotion: reduceMotion)
     }
@@ -151,7 +161,7 @@ struct DashboardCard: View {
     @ViewBuilder
     private var monthValue: some View {
         // Secondary tier: quieter than the hero, still legible as an amount.
-        Text(displayedSpentMonth, format: Self.eur)
+        Text(displayedSpentMonth, format: money)
             .font(.callout.weight(.medium))
             .foregroundStyle(.secondary)
             .monospacedDigit()
@@ -181,9 +191,9 @@ struct DashboardCard: View {
             }
             return text
         }
-        let today = displayedSpentToday.formatted(Self.eur)
-        let left = snapshot.left.formatted(Self.eur)
-        let month = displayedSpentMonth.formatted(Self.eur)
+        let today = displayedSpentToday.formatted(money)
+        let left = snapshot.left.formatted(money)
+        let month = displayedSpentMonth.formatted(money)
         let saved = (snapshot.savedRatio ?? 0).formatted(Self.percent)
         var text = "Spent today \(today), \(left) left, spent this month \(month), saved \(saved) this month"
         if let statusMessage, !statusMessage.isEmpty {
@@ -192,13 +202,16 @@ struct DashboardCard: View {
         return text
     }
 
-    private static let eur = FloatingPointFormatStyle<Double>.Currency(code: "EUR")
-        .precision(.fractionLength(2))
+    private var money: FloatingPointFormatStyle<Double>.Currency {
+        FloatingPointFormatStyle<Double>.Currency(code: currencyCode)
+            .precision(.fractionLength(2))
+    }
+
     private static let percent = FloatingPointFormatStyle<Double>.Percent()
         .precision(.fractionLength(0))
 }
 
-private struct CommandKeycap: View {
+struct CommandKeycap: View {
     var letter: String
     var visible: Bool
     var reduceMotion: Bool

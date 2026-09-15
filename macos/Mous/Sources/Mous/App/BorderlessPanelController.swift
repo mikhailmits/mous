@@ -9,6 +9,7 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
     private let store: AppStore
     private let tipChrome = SpendTipChrome()
     private let commandHints = CommandHintState()
+    private let reportNotice: ReportNoticeChrome
     private var hasPositioned = false
     private var spaceObserver: NSObjectProtocol?
     private var keyMonitor: Any?
@@ -26,8 +27,9 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
     private var tipPinned = false
     private var commandHintGeneration = 0
 
-    init(store: AppStore) {
+    init(store: AppStore, reportNotice: ReportNoticeChrome) {
         self.store = store
+        self.reportNotice = reportNotice
         super.init()
         spaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.activeSpaceDidChangeNotification,
@@ -37,7 +39,8 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
             Task { @MainActor in self?.hide() }
         }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { [weak self] event in
-            self?.handleLocalEvent(event) ?? event
+            guard let self else { return event }
+            return self.handleLocalEvent(event)
         }
         observeLaunchSplash()
     }
@@ -69,7 +72,13 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
         window.collectionBehavior.insert(.moveToActiveSpace)
         window.orderFrontRegardless()
         window.makeKeyAndOrderFront(nil)
-        NotificationCenter.default.post(name: .mousRestoreInputFocus, object: nil)
+        if !commandHints.showSettings,
+           !commandHints.showNotifications,
+           !commandHints.showOptionsMenu,
+           commandHints.focusedList == nil
+        {
+            NotificationCenter.default.post(name: .mousRestoreInputFocus, object: nil)
+        }
         guard attempt < 8 else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             guard let self, let window = self.window else { return }
@@ -85,6 +94,8 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
         // terminal still shows the animation after the shell takes focus back.
         if store.showLaunchSplash { return }
         dismissTipImmediately()
+        commandHints.focusedList = nil
+        commandHints.showOptionsMenu = false
         hideCommandHints()
         window?.orderOut(nil)
         window?.collectionBehavior.remove(.moveToActiveSpace)
@@ -112,11 +123,16 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
         let root = MousPopup(
             store: store,
             commandHints: commandHints,
+            reportNotice: reportNotice,
             onQuit: { [weak self] in self?.quitApp() },
+            onEscape: { [weak self] in self?.handleEscape() ?? false },
             onSizeChange: { [weak self] size in self?.updateContentSize(size) },
             onSpendHover: { [weak self] inside in self?.noteSpendHover(inside) },
             onSavedHover: { [weak self] inside in self?.noteSavedHover(inside) },
-            onAppHover: { [weak self] inside in self?.noteAppHover(inside) }
+            onAppHover: { [weak self] inside in self?.noteAppHover(inside) },
+            onOpenSettings: { [weak self] in self?.prepareSettings() },
+            onOpenNotifications: { [weak self] in self?.prepareNotifications() },
+            onOpenOptionsMenu: { [weak self] in self?.prepareOptionsMenu() }
         )
         let hosting = ClearHostingView(rootView: root)
         hosting.wantsLayer = true
@@ -143,6 +159,7 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
         window.animationBehavior = .utilityWindow
         window.isReleasedWhenClosed = false
         window.delegate = self
+        window.handleCancel = { [weak self] in self?.handleEscape() ?? false }
         window.contentView = hosting
         window.contentView?.wantsLayer = true
         window.contentView?.layer?.isOpaque = false
@@ -174,6 +191,9 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
     private static let commandHintDelay: TimeInterval = 0.4
 
     private func handleLocalEvent(_ event: NSEvent) -> NSEvent? {
+        if event.type == .keyDown, event.keyCode == 53, handleEscape() {
+            return nil
+        }
         guard window?.isKeyWindow == true else { return event }
         switch event.type {
         case .flagsChanged:
@@ -194,6 +214,8 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
                 guard let self, generation == self.commandHintGeneration else { return }
                 guard Self.isCommandOnly(NSEvent.modifierFlags) else { return }
                 guard self.store.hasLoadedDashboard else { return }
+                guard !self.commandHints.showSettings else { return }
+                guard !self.commandHints.showNotifications else { return }
                 withAnimation(self.hintAnimation) { self.commandHints.visible = true }
             }
         } else {
@@ -218,29 +240,147 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
         return relevant == .command
     }
 
-    private func handleCommandKey(_ event: NSEvent) -> NSEvent? {
-        if event.keyCode == 53 {
-            if tipVisible {
-                tipPinned = false
-                hideTip()
-                return nil
-            }
-            return event
+    /// Esc: report detail → inbox; inbox / settings → home; focused list → dashboard; compact tip → dismiss; otherwise let it quit.
+    private var swallowEscape = false
+
+    private func handleEscape() -> Bool {
+        if commandHints.showOptionsMenu {
+            withAnimation(hintAnimation) { commandHints.showOptionsMenu = false }
+            swallowEscape = true
+            return true
         }
+        if commandHints.showSettings {
+            withAnimation(hintAnimation) { commandHints.showSettings = false }
+            NotificationCenter.default.post(name: .mousRestoreInputFocus, object: nil)
+            swallowEscape = true
+            return true
+        }
+        if commandHints.showNotifications {
+            if reportNotice.popSelection() {
+                swallowEscape = true
+                return true
+            }
+            reportNotice.closeInbox()
+            withAnimation(hintAnimation) { commandHints.showNotifications = false }
+            NotificationCenter.default.post(name: .mousRestoreInputFocus, object: nil)
+            swallowEscape = true
+            return true
+        }
+        if commandHints.focusedList != nil {
+            restoreDashboard()
+            swallowEscape = true
+            return true
+        }
+        if tipVisible {
+            tipPinned = false
+            hideTip()
+            swallowEscape = true
+            return true
+        }
+        if swallowEscape {
+            swallowEscape = false
+            return true
+        }
+        return false
+    }
+
+    private func prepareOptionsMenu() {
+        dismissTipImmediately()
+        commandHints.focusedList = nil
+        commandHints.showSettings = false
+        commandHints.showNotifications = false
+    }
+
+    private func prepareSettings() {
+        dismissTipImmediately()
+        hideCommandHints()
+        commandHints.focusedList = nil
+        commandHints.showOptionsMenu = false
+        commandHints.showNotifications = false
+    }
+
+    private func prepareNotifications() {
+        dismissTipImmediately()
+        hideCommandHints()
+        commandHints.focusedList = nil
+        commandHints.showOptionsMenu = false
+        commandHints.showSettings = false
+        reportNotice.closeInbox()
+    }
+
+    private func handleCommandKey(_ event: NSEvent) -> NSEvent? {
         guard event.modifierFlags.contains(.command) else { return event }
         guard !event.modifierFlags.contains(.option), !event.modifierFlags.contains(.control) else {
             return event
         }
-        switch event.charactersIgnoringModifiers?.lowercased() {
+        guard !store.showLaunchSplash else { return event }
+        let key = event.charactersIgnoringModifiers?.lowercased()
+        if commandHints.showSettings || commandHints.showNotifications {
+            return event
+        }
+        if commandHints.showOptionsMenu {
+            switch key {
+            case "o":
+                withAnimation(hintAnimation) { commandHints.showOptionsMenu = false }
+                return nil
+            case "s":
+                openSettingsFromShortcut()
+                return nil
+            case "n":
+                openNotificationsFromShortcut()
+                return nil
+            default:
+                return event
+            }
+        }
+        switch key {
+        case "o":
+            openOptionsFromShortcut()
+            return nil
+        case "s":
+            openSettingsFromShortcut()
+            return nil
+        case "n":
+            openNotificationsFromShortcut()
+            return nil
         case "m":
             openTip(kind: .monthSpend)
             return nil
         case "x":
             openTip(kind: .expensive)
             return nil
+        case "f":
+            toggleFocusedList()
+            return nil
         default:
             return event
         }
+    }
+
+    /// ⌘O: open or close the ⋯ menu.
+    private func openOptionsFromShortcut() {
+        prepareOptionsMenu()
+        withAnimation(hintAnimation) { commandHints.showOptionsMenu = true }
+    }
+
+    /// ⌘S: Settings, from home or the open ⋯ menu.
+    private func openSettingsFromShortcut() {
+        prepareSettings()
+        withAnimation(hintAnimation) { commandHints.showSettings = true }
+    }
+
+    /// ⌘N: Notifications, from home or the open ⋯ menu.
+    private func openNotificationsFromShortcut() {
+        prepareNotifications()
+        withAnimation(hintAnimation) { commandHints.showNotifications = true }
+    }
+
+    /// macOS report banner: open the inbox on the newest unread report.
+    func openFromReportAlert() {
+        show()
+        prepareNotifications()
+        withAnimation(hintAnimation) { commandHints.showNotifications = true }
+        reportNotice.selectLatestUnread()
     }
 
     /// Demo/screenshot hook (`MOUS_DEMO_TIP`): open and pin a tip exactly
@@ -252,6 +392,14 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
     private func openTip(kind: DashboardTipKind) {
         guard store.hasLoadedDashboard else { return }
         hoverGeneration += 1
+        if commandHints.focusedList != nil {
+            if commandHints.focusedList == kind {
+                restoreDashboard()
+            } else {
+                withAnimation(hintAnimation) { commandHints.focusedList = kind }
+            }
+            return
+        }
         if tipVisible, tipPinned, tipChrome.kind == kind {
             tipPinned = false
             hideTip()
@@ -262,6 +410,31 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
         showTip()
     }
 
+    /// ⌘F: swap the dashboard for the list in this window, or restore it.
+    private func toggleFocusedList() {
+        guard store.hasLoadedDashboard else { return }
+        if commandHints.focusedList != nil {
+            restoreDashboard()
+            return
+        }
+        let kind: DashboardTipKind
+        if tipVisible {
+            kind = tipChrome.kind
+        } else if hoveringSaved {
+            kind = .expensive
+        } else {
+            kind = .monthSpend
+        }
+        dismissTipImmediately()
+        withAnimation(hintAnimation) { commandHints.focusedList = kind }
+    }
+
+    private func restoreDashboard() {
+        hoverGeneration += 1
+        withAnimation(hintAnimation) { commandHints.focusedList = nil }
+        NotificationCenter.default.post(name: .mousRestoreInputFocus, object: nil)
+    }
+
     // MARK: - Spend tip (sibling panel, never overlays the cards)
 
     private static let tipGap: CGFloat = 8
@@ -270,13 +443,13 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
 
     private func noteSpendHover(_ inside: Bool) {
         hoveringSpend = inside
-        if inside { tipChrome.kind = .monthSpend }
+        if inside, commandHints.focusedList == nil { tipChrome.kind = .monthSpend }
         scheduleTip()
     }
 
     private func noteSavedHover(_ inside: Bool) {
         hoveringSaved = inside
-        if inside { tipChrome.kind = .expensive }
+        if inside, commandHints.focusedList == nil { tipChrome.kind = .expensive }
         scheduleTip()
     }
 
@@ -291,7 +464,14 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
     }
 
     private var wantsTip: Bool {
-        hoveringSpend || hoveringSaved || tipPinned || (tipVisible && (hoveringApp || hoveringTip))
+        if commandHints.focusedList != nil
+            || commandHints.showSettings
+            || commandHints.showNotifications
+            || commandHints.showOptionsMenu
+        {
+            return false
+        }
+        return hoveringSpend || hoveringSaved || tipPinned || (tipVisible && (hoveringApp || hoveringTip))
     }
 
     private func scheduleTip() {
@@ -404,7 +584,7 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
 
         var size = reported.width > 1
             ? reported
-            : NSSize(width: 244 + shadow * 2, height: min(visualHeight, maxVisual) + shadow * 2)
+            : NSSize(width: SpendTipCard.compactWidth + shadow * 2, height: min(visualHeight, maxVisual) + shadow * 2)
         size.height = min(size.height, maxVisual + shadow * 2)
         size.height = max(size.height, Self.minTipHeight + shadow * 2)
 
@@ -444,6 +624,7 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
         let root = SpendTipHost(
             store: store,
             chrome: tipChrome,
+            commandHints: commandHints,
             onHover: { [weak self] inside in self?.noteTipHover(inside) },
             onSizeChange: { [weak self] size in self?.updateTipSize(size) }
         )
@@ -505,10 +686,13 @@ private final class TipPanel: NSPanel {
 }
 
 private final class KeyableWindow: NSWindow {
+    var handleCancel: (() -> Bool)?
+
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
 
     override func cancelOperation(_ sender: Any?) {
+        if handleCancel?() == true { return }
         NSApp.terminate(nil)
     }
 }

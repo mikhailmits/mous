@@ -5,8 +5,9 @@ import SwiftUI
 /// the transparent marks, so it sits on whatever is behind the popup.
 struct LaunchSplash: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
 
-    @State private var images = MousIcons.variantImages()
+    @State private var images: [NSImage] = []
     @State private var index = 0
     @State private var flipDegrees: Double = 0
 
@@ -35,7 +36,20 @@ struct LaunchSplash: View {
         .frame(maxWidth: .infinity, minHeight: Self.contentHeight)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Starting mous")
-        .task { await runLoop() }
+        .task(id: colorScheme) {
+            reloadImages()
+            await runLoop()
+        }
+    }
+
+    private func reloadImages() {
+        let next = MousIcons.themedVariants(isDark: colorScheme == .dark)
+        images = next
+        if !next.isEmpty {
+            index %= next.count
+        } else {
+            index = 0
+        }
     }
 
     @MainActor

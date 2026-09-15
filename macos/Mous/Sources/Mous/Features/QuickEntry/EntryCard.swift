@@ -7,6 +7,7 @@ struct EntryCard: View {
     var commitTick: Int
     var rejectTick: Int
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mousAccent) private var mousAccent
 
     // Real field visibility. Floored at 0.01 during commit so AppKit never
     // resigns first responder for a fully transparent view.
@@ -85,7 +86,7 @@ struct EntryCard: View {
         case .valid:
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Color.green.opacity(0.45))
+                .foregroundStyle(mousAccent.opacity(0.82))
                 .transition(.opacity)
         case .committedInvalid:
             Image(systemName: "exclamationmark.circle.fill")
