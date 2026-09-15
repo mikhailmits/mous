@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 from collections.abc import AsyncIterator
@@ -33,15 +34,9 @@ def _project_root() -> Path:
 
 
 def _databases() -> dict[str, str]:
-    override = os.environ.get("MOUS_DATABASE_URL")
-    if override:
-        return {"default": override}
-    root = _project_root()
-    if str(root) not in sys.path:
-        sys.path.insert(0, str(root))
-    import oxyde_config
+    from mous.config.utils import database_url
 
-    return oxyde_config.DATABASES
+    return {"default": database_url()}
 
 
 @asynccontextmanager
@@ -53,8 +48,19 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     from mous.db.utils import ensure_defaults
 
     await ensure_defaults()
-    yield
-    await db.close()
+    from mous.services.report import run_summary_schedule, summary_report
+
+    _app.state.summary_report = summary_report
+    poll = asyncio.create_task(run_summary_schedule(summary_report), name="mous-summary-report")
+    try:
+        yield
+    finally:
+        poll.cancel()
+        try:
+            await poll
+        except asyncio.CancelledError:
+            pass
+        await db.close()
 
 
 async def _ensure_schema() -> None:

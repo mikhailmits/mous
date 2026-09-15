@@ -6,6 +6,8 @@ services:
       - "127.0.0.1:8000:8000"
     environment:
       MOUS_DATABASE_URL: sqlite:////data/data.db
+      MOUS_CONFIG_DIR: /data
+    command: ["python", "-c", "from mous.api.app import run; run(host='0.0.0.0', port=8000)"]
     volumes:
       - mous-data:/data
     restart: unless-stopped

@@ -36,4 +36,4 @@ USER mous
 EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=8s --retries=5 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/openapi.json')"
-CMD ["mous", "serve", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-c", "from mous.api.app import run; run(host='0.0.0.0', port=8000)"]
