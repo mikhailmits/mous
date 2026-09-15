@@ -26,6 +26,9 @@ public final class AppStore {
     public private(set) var outgoingLine = ""
 
     public var currenciesLoading = true
+    /// ISO 4217 code for on-screen amounts. Conversion uses `MoneyDisplay.book`
+    /// when quotes exist; missing pairs stay identity.
+    public private(set) var displayCurrencyCode: String
 
     private var currencies: [Currency] = []
     private var mainAccount: Account?
@@ -42,6 +45,7 @@ public final class AppStore {
         self.client = client
         self.timeZone = timeZone
         self.now = now
+        self.displayCurrencyCode = MousCurrencyPref.isoCode(for: MousConfigFile.load().currency)
     }
 
     public var presentation: EntryPresentation {
@@ -66,7 +70,20 @@ public final class AppStore {
     }
 
     public func appear() async {
+        applyDisplayCurrencyFromConfig()
         await refresh(firstLoad: !hasLoadedDashboard)
+    }
+
+    /// Re-read Settings currency when home is shown again. `appear` only
+    /// runs once from `MousPopup.task`.
+    public func reloadPreferences() async {
+        applyDisplayCurrencyFromConfig()
+        do {
+            try await loadCurrenciesAndAccount()
+            reparse(clearFailed: false)
+        } catch {
+            // Display already follows config; parser keeps the last default.
+        }
     }
 
     public func submit() async {
@@ -126,13 +143,18 @@ public final class AppStore {
                 }
                 guard let account = mainAccount else { throw APIError.missingMainAccount }
                 let today = CivilDate.localToday(timeZone: timeZone, now: now())
+                let categoryID = await promoteRepeatCategory(named: draft.description)
                 _ = try await client.createTransaction(
                     description: draft.description,
                     value: draft.signedValue,
                     currencyID: draft.currencyID,
                     occurredOn: today,
-                    accountID: account.id
+                    accountID: account.id,
+                    categoryID: categoryID
                 )
+                if let categoryID {
+                    await backfillCategory(categoryID, named: draft.description)
+                }
                 loadGeneration += 1
                 outgoingLine = text
                 text = ""
@@ -182,10 +204,14 @@ public final class AppStore {
                 async let categoryList = client.categories()
                 let goodsList = try await goods
                 let loadedCategories = try await categoryList
+                let codes = Dictionary(uniqueKeysWithValues: currencies.map { ($0.id, $0.symbol) })
                 let snapshot = DashboardSnapshot.compute(
                     balance: try await balance,
                     goods: goodsList,
-                    today: today
+                    today: today,
+                    displayCode: displayCurrencyCode,
+                    currencyCodeByID: codes,
+                    fx: MoneyDisplay.book
                 )
                 guard generation == loadGeneration else { return }
                 self.snapshot = snapshot
@@ -197,7 +223,7 @@ public final class AppStore {
                         return $0.id > $1.id
                     }
                 expensiveMonthRows = SpendRank.mostExpensive(
-                    transactions: monthTransactions,
+                    transactions: displayed(monthTransactions),
                     categories: categories
                 )
                 hasLoadedDashboard = true
@@ -254,9 +280,124 @@ public final class AppStore {
         let accounts = try await accountsTask
         currencies = try await currenciesTask
         currenciesLoading = false
+        applyDisplayCurrencyFromConfig()
+        await syncPreferredDefaultCurrency()
         guard let preferred = Account.preferred(from: accounts) else {
             throw APIError.missingMainAccount
         }
         mainAccount = preferred
+    }
+
+    public func displayedAmount(_ signedValue: Double, currencyID: Int) -> Double {
+        let from = currencies.first { $0.id == currencyID }?.symbol ?? displayCurrencyCode
+        return MoneyDisplay.convert(signedValue, from: from, to: displayCurrencyCode)
+    }
+
+    private func displayed(_ goods: [Transaction]) -> [Transaction] {
+        goods.map { tx in
+            var copy = tx
+            copy.signedValue = displayedAmount(tx.signedValue, currencyID: tx.currencyID)
+            return copy
+        }
+    }
+
+    private func promoteRepeatCategory(named description: String) async -> Int? {
+        let display = RepeatCategory.displayName(description)
+        guard RepeatCategory.shouldPromote(description: display, among: monthTransactions) else {
+            return nil
+        }
+        if let id = RepeatCategory.existingID(matching: display, in: categories) {
+            return id
+        }
+        do {
+            if let remote = try await client.category(named: display) {
+                mergeCategory(remote)
+                return remote.id
+            }
+            let created = try await client.createCategory(name: display)
+            mergeCategory(created)
+            return created.id
+        } catch {
+            do {
+                let list = try await client.categories()
+                categories = list
+                return RepeatCategory.existingID(matching: display, in: list)
+            } catch {
+                return nil
+            }
+        }
+    }
+
+    private func backfillCategory(_ categoryID: Int, named description: String) async {
+        let key = RepeatCategory.normalized(description)
+        guard !key.isEmpty else { return }
+        let targets = monthTransactions.filter {
+            RepeatCategory.normalized($0.description) == key && $0.categoryID == nil
+        }
+        for tx in targets {
+            do {
+                _ = try await client.patchTransaction(id: tx.id, categoryID: categoryID)
+            } catch {
+                return
+            }
+        }
+    }
+
+    private func mergeCategory(_ category: Category) {
+        if let index = categories.firstIndex(where: { $0.id == category.id }) {
+            categories[index] = category
+        } else {
+            categories.append(category)
+        }
+    }
+
+    private func applyDisplayCurrencyFromConfig() {
+        displayCurrencyCode = MousCurrencyPref.isoCode(for: MousConfigFile.load().currency)
+    }
+
+    /// Make config `currency` the API default so unsuffixed quick-entry uses it.
+    private func syncPreferredDefaultCurrency() async {
+        let pref = MousCurrencyPref.pref(for: MousConfigFile.load().currency)
+        let symbol = pref.rawValue
+        do {
+            if let existing = currencyMatching(symbol) {
+                if !existing.isDefault {
+                    adopt(try await client.setDefaultCurrency(id: existing.id))
+                }
+                return
+            }
+            let created = try await client.createCurrency(
+                symbol: symbol,
+                name: pref.englishName,
+                isDefault: true
+            )
+            adopt(created)
+            if !created.isDefault {
+                adopt(try await client.setDefaultCurrency(id: created.id))
+            }
+        } catch {
+            do {
+                currencies = try await client.currencies()
+                if let existing = currencyMatching(symbol), !existing.isDefault {
+                    adopt(try await client.setDefaultCurrency(id: existing.id))
+                }
+            } catch {
+                return
+            }
+        }
+    }
+
+    private func currencyMatching(_ symbol: String) -> Currency? {
+        currencies.first { $0.symbol.caseInsensitiveCompare(symbol) == .orderedSame }
+    }
+
+    private func adopt(_ selected: Currency) {
+        var next = currencies.filter { $0.id != selected.id }.map {
+            Currency(id: $0.id, symbol: $0.symbol, name: $0.name, isDefault: false)
+        }
+        next.append(
+            Currency(id: selected.id, symbol: selected.symbol, name: selected.name, isDefault: true)
+        )
+        currencies = next
     }
 }

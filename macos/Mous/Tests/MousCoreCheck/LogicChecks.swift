@@ -49,6 +49,19 @@ func parserChecks() {
         Check.fail("two currency default eur")
     }
 
+    switch SpendingLineParser.parse(
+        line: "-50",
+        currencies: [
+            Currency(id: 1, symbol: "eur", name: "Euro", isDefault: false),
+            Currency(id: 9, symbol: "usd", name: "US Dollar", isDefault: true),
+        ]
+    ) {
+    case .complete(let draft):
+        Check.equal(draft.currencySymbol, "usd")
+    default:
+        Check.fail("isDefault currency should win")
+    }
+
     switch SpendingLineParser.parse(line: "-24eur extra", currencies: [eu, eur]) {
     case .complete(let draft):
         Check.equal(draft.currencySymbol, "eur")
@@ -193,6 +206,82 @@ func dashboardChecks() {
     Check.accuracy(nonFinite.left, 0)
 }
 
+func moneyDisplayChecks() {
+    let previous = MoneyDisplay.book
+    defer { MoneyDisplay.book = previous }
+    MoneyDisplay.book = .identity
+
+    Check.accuracy(MoneyDisplay.convert(10, from: "EUR", to: "eur"), 10)
+    Check.accuracy(MoneyDisplay.convert(10, from: "EUR", to: "USD"), 10)
+
+    var book = FXBook()
+    book.set(base: "EUR", quote: "USD", rate: 1.1)
+    Check.accuracy(MoneyDisplay.convert(10, from: "EUR", to: "USD", using: book), 11)
+    Check.accuracy(MoneyDisplay.convert(11, from: "USD", to: "EUR", using: book), 10)
+    Check.accuracy(MoneyDisplay.convert(10, from: "EUR", to: "UAH", using: book), 10)
+
+    book.set(base: "EUR", quote: "UAH", rate: 40)
+    Check.accuracy(MoneyDisplay.convert(11, from: "USD", to: "UAH", using: book), 400)
+
+    let today = CivilDate(year: 2026, month: 9, day: 8)
+    let usdSpend = Transaction(
+        id: 1,
+        description: "coffee",
+        signedValue: -11,
+        currencyID: 2,
+        accountID: 1,
+        civilDate: today
+    )
+    let converted = DashboardSnapshot.compute(
+        balance: 0,
+        goods: [usdSpend],
+        today: today,
+        displayCode: "EUR",
+        currencyCodeByID: [2: "USD"],
+        fx: book
+    )
+    Check.accuracy(converted.spentToday, 10)
+    Check.accuracy(converted.spentMonth, 10)
+
+    let identity = DashboardSnapshot.compute(
+        balance: 0,
+        goods: [usdSpend],
+        today: today,
+        displayCode: "EUR",
+        currencyCodeByID: [2: "USD"]
+    )
+    Check.accuracy(identity.spentToday, 11)
+}
+
+func repeatCategoryChecks() {
+    let day = CivilDate(year: 2026, month: 9, day: 8)
+    func tx(_ name: String, id: Int = 1, tagged: Int? = nil) -> Transaction {
+        Transaction(
+            id: id,
+            description: name,
+            signedValue: -4,
+            currencyID: 1,
+            accountID: 1,
+            civilDate: day,
+            categoryID: tagged
+        )
+    }
+    Check.equal(RepeatCategory.normalized("  Coffee "), "coffee")
+    Check.equal(RepeatCategory.displayName("  Coffee "), "Coffee")
+    Check.true(!RepeatCategory.shouldPromote(description: "coffee", among: []), "first coffee is not a category")
+    Check.true(
+        RepeatCategory.shouldPromote(description: "Coffee", among: [tx("coffee")]),
+        "second coffee becomes a category"
+    )
+    Check.true(!RepeatCategory.shouldPromote(description: "tea", among: [tx("coffee")]), "unrelated name")
+    Check.true(!RepeatCategory.shouldPromote(description: "   ", among: [tx("   ")]), "blank is not a category")
+    Check.equal(RepeatCategory.existingID(matching: "coffee", in: [Category(id: 9, name: "Coffee")]), 9)
+    Check.true(RepeatCategory.existingID(matching: "tea", in: [Category(id: 9, name: "Coffee")]) == nil)
+    let long = String(repeating: "a", count: 40)
+    Check.equal(RepeatCategory.displayName(long).count, RepeatCategory.nameMaxLength)
+    Check.equal(RepeatCategory.normalized(long).count, RepeatCategory.nameMaxLength)
+}
+
 func accountChecks() {
     let card = Account(id: 1, name: "card")
     let main = Account(id: 2, name: "main")
@@ -326,9 +415,243 @@ func spendRankChecks() {
     Check.equal(mixedDays[1].civilDate, day)
 }
 
+func configChecks() {
+    let dir = FileManager.default.temporaryDirectory
+        .appendingPathComponent("mous-config-\(UUID().uuidString)", isDirectory: true)
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    defer {
+        MousConfigFile.directoryOverride = nil
+        try? FileManager.default.removeItem(at: dir)
+    }
+    MousConfigFile.directoryOverride = dir
+
+    Check.equal(ReportCadence.classify("14 days"), .twoWeeks)
+    Check.equal(ReportCadence.classify("week"), .week)
+    Check.equal(ReportCadence.classify("2 weeks"), .twoWeeks)
+    Check.equal(ReportCadence.classify("month"), .month)
+    Check.equal(ReportCadence.classify("3 weeks"), .custom)
+    Check.true(ReportCadence.isValidPeriod("3 weeks"), "3 weeks is valid")
+    Check.true(ReportCadence.isValidPeriod("week"), "week is valid")
+    Check.true(!ReportCadence.isValidPeriod("whenever"), "whenever is invalid")
+    Check.true(!ReportCadence.isValidPeriod("0 days"), "0 days is invalid")
+
+    let first = MousConfigFile.ensure()
+    Check.equal(first.host, "127.0.0.1")
+    Check.equal(first.port, 8000)
+    Check.equal(first.reportPeriod, "14 days")
+    Check.equal(first.theme, "system")
+    Check.equal(first.currency, "eur")
+    Check.equal(MousCurrencyPref.eur.isoCode, "EUR")
+    Check.equal(MousCurrencyPref.usd.isoCode, "USD")
+    Check.equal(MousCurrencyPref.uah.isoCode, "UAH")
+    Check.equal(MousCurrencyPref.isoCode(for: "usd"), "USD")
+    Check.equal(MousCurrencyPref.isoCode(for: "UAH"), "UAH")
+    Check.equal(MousCurrencyPref.isoCode(for: "unknown"), "EUR")
+    Check.equal(MousCurrencyPref.usd.englishName, "US Dollar")
+    Check.equal(MousCurrencyPref.pref(for: "uah"), .uah)
+    Check.equal(first.notifyInApp, true)
+    Check.equal(first.notifyMacOS, true)
+    Check.equal(first.dev, false)
+    Check.equal(first.databasePath, dir.appendingPathComponent("data.db").path)
+
+    var cfg = first
+    cfg.reportPeriod = "week"
+    cfg.theme = "dark"
+    cfg.currency = "uah"
+    cfg.dev = true
+    cfg.notifyInApp = false
+    cfg.notifyMacOS = false
+    MousConfigFile.save(cfg)
+    let loaded = MousConfigFile.load()
+    Check.equal(loaded.reportPeriod, "week")
+    Check.equal(loaded.theme, "dark")
+    Check.equal(loaded.currency, "uah")
+    Check.equal(loaded.dev, true)
+    Check.equal(loaded.notifyInApp, false)
+    Check.equal(loaded.notifyMacOS, false)
+
+    let partial = dir.appendingPathComponent("config.json")
+    try? Data("{ \"host\": \"0.0.0.0\", \"port\": 9000 }\n".utf8).write(to: partial)
+    let filled = MousConfigFile.ensure()
+    Check.equal(filled.host, "0.0.0.0")
+    Check.equal(filled.port, 9000)
+    Check.equal(filled.theme, "system")
+    Check.equal(filled.reportPeriod, "14 days")
+    Check.equal(filled.notifyInApp, true)
+    Check.equal(filled.notifyMacOS, true)
+    Check.equal(MousConfigFile.summaryReportURL(), dir.appendingPathComponent("summary_report.json"))
+}
+
+func summaryReportChecks() {
+    Check.equal(SummaryReportCopy.readyMessage(period: "14 days"), "Your 2 week report is ready")
+    Check.equal(SummaryReportCopy.readyMessage(period: "week"), "Your week report is ready")
+    Check.equal(SummaryReportCopy.readyMessage(period: "month"), "Your month report is ready")
+    Check.equal(SummaryReportCopy.readyMessage(period: "3 weeks"), "Your 3 weeks report is ready")
+    Check.equal(SummaryReportCopy.readyMessage(period: ""), "Your report is ready")
+
+    let python = "2026-09-15T11:56:25.259245+00:00"
+    guard let parsed = SummaryReportTime.parse(python) else {
+        Check.fail("parse python isoformat \(python)")
+        return
+    }
+    let parts = Calendar(identifier: .gregorian)
+        .dateComponents(in: TimeZone(secondsFromGMT: 0)!, from: parsed)
+    Check.equal(parts.year ?? 0, 2026)
+    Check.equal(parts.month ?? 0, 9)
+    Check.equal(parts.day ?? 0, 15)
+    Check.equal(parts.hour ?? 0, 11)
+    Check.equal(parts.minute ?? 0, 56)
+
+    let json = """
+    {"captured_at":"2026-09-15T11:56:25.259245+00:00","period":"14 days","stdout":"summary\\n"}
+    """.data(using: .utf8)!
+    guard let file = SummaryReportFile.decode(json) else {
+        Check.fail("decode summary_report.json")
+        return
+    }
+    Check.equal(file.period, "14 days")
+    Check.true(file.stdout.contains("summary"), "stdout kept")
+
+    var gate = SummaryReportGate()
+    Check.equal(gate.consider(nil), .ignore)
+    Check.equal(gate.consider(file), .remember)
+    Check.equal(gate.consider(file), .ignore)
+
+    var later = file
+    later.capturedAt = file.capturedAt.addingTimeInterval(60)
+    guard case .notify(let noticed) = gate.consider(later) else {
+        Check.fail("expected notify on newer captured_at")
+        return
+    }
+    Check.equal(noticed.capturedAt, later.capturedAt)
+    Check.equal(gate.consider(later), .ignore)
+
+    Check.equal(SummaryReportCopy.inboxTitle(period: "14 days"), "2 week report")
+    Check.equal(SummaryReportCopy.inboxTitle(period: "week"), "Week report")
+    Check.equal(SummaryReportCopy.inboxTitle(period: "month"), "Month report")
+    Check.equal(SummaryReportCopy.inboxTitle(period: "3 weeks"), "3 weeks report")
+    Check.equal(SummaryReportCopy.inboxTitle(period: ""), "Report")
+
+    let sampleStdout = """
+    summary
+      2 Sep 2026 – 15 Sep 2026
+        currency = eur
+        n = 3
+        in = 2000 eur
+        out = 17.49 eur
+        saved = 1982.51 eur
+        top = [food]
+        runway = 1586.91
+        next_month_spent_predictions = 12.4929 eur
+
+        if you keep up you will spend money on:
+          Netflix = 12.99 eur
+          Total spent on subscriptions = 12.99 eur
+    """
+    guard let figures = SummaryReportFigures.parse(sampleStdout) else {
+        Check.fail("parse summary stdout")
+        return
+    }
+    Check.equal(figures.range, "2 Sep 2026 – 15 Sep 2026")
+    Check.equal(figures.currency, "eur")
+    Check.equal(figures.count, 3)
+    Check.accuracy(figures.income, 2000)
+    Check.accuracy(figures.expense, 17.49)
+    Check.accuracy(figures.saved, 1982.51)
+    Check.equal(figures.top, ["food"])
+    Check.accuracy(figures.runway ?? -1, 1586.91)
+    Check.accuracy(figures.nextMonth ?? -1, 12.4929)
+
+    let missing = SummaryReportFigures.parse("not a summary\n")
+    Check.true(missing == nil, "reject non-summary stdout")
+    let noRunway = SummaryReportFigures.parse("""
+    summary
+      1 Sep 2026
+        currency = €
+        n = 0
+        in = 0 €
+        out = 0 €
+        saved = 0 €
+        top = []
+        runway = ...
+        next_month_spent_predictions = 0 €
+    """)
+    Check.true(noRunway?.runway == nil, "ellipsis runway is nil")
+    Check.equal(noRunway?.top ?? ["x"], [])
+
+    var inbox: [ReportInboxItem] = []
+    let firstReport = SummaryReportFile(capturedAt: Date(timeIntervalSince1970: 1_000), period: "14 days", stdout: sampleStdout)
+    inbox = ReportInboxFile.ingesting(firstReport, unread: true, into: inbox)
+    Check.equal(inbox.count, 1)
+    Check.equal(inbox[0].read, false)
+    inbox = ReportInboxFile.ingesting(firstReport, unread: true, into: inbox)
+    Check.equal(inbox.count, 1)
+    var laterReport = firstReport
+    laterReport.capturedAt = firstReport.capturedAt.addingTimeInterval(60)
+    inbox = ReportInboxFile.ingesting(laterReport, unread: false, into: inbox)
+    Check.equal(inbox.count, 2)
+    Check.equal(inbox[0].capturedAt, laterReport.capturedAt)
+    Check.equal(inbox[0].read, true)
+    Check.equal(inbox[1].read, false)
+
+    var many: [ReportInboxItem] = []
+    for i in 0..<30 {
+        let file = SummaryReportFile(
+            capturedAt: Date(timeIntervalSince1970: TimeInterval(i + 1)),
+            period: "week",
+            stdout: "summary\n"
+        )
+        many = ReportInboxFile.ingesting(file, unread: true, into: many)
+    }
+    Check.equal(many.count, ReportInboxFile.maxItems)
+    Check.equal(many[0].capturedAt, Date(timeIntervalSince1970: 30))
+
+    let dir = FileManager.default.temporaryDirectory
+        .appendingPathComponent("mous-report-\(UUID().uuidString)", isDirectory: true)
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    defer {
+        MousConfigFile.directoryOverride = nil
+        try? FileManager.default.removeItem(at: dir)
+    }
+    MousConfigFile.directoryOverride = dir
+    try? json.write(to: MousConfigFile.summaryReportURL())
+    let loaded = SummaryReportFile.load()
+    Check.true(loaded != nil, "load from config dir")
+    Check.equal(loaded?.period, "14 days")
+
+    ReportInboxFile.save(inbox)
+    let restored = ReportInboxFile.load()
+    Check.equal(restored.count, 2)
+    Check.equal(restored[0].period, "14 days")
+    Check.equal(restored[0].read, true)
+    Check.equal(MousConfigFile.reportInboxURL(), dir.appendingPathComponent("report_inbox.json"))
+}
+
+func updateVersionChecks() {
+    Check.equal(UpdateChecker.compareVersions("1.0.0", "1.0.1"), .orderedAscending)
+    Check.true(UpdateChecker.isRemoteNewer(installed: "1.0.0", remote: "1.0.1"), "1.0.1 is newer than 1.0.0")
+    Check.equal(UpdateChecker.compareVersions("v0.1.3", "0.1.3"), .orderedSame)
+    Check.true(!UpdateChecker.isRemoteNewer(installed: "v0.1.3", remote: "0.1.3"), "v prefix is the same version")
+    Check.equal(UpdateChecker.compareVersions("0.1.3", "0.1.3"), .orderedSame)
+    Check.true(!UpdateChecker.isRemoteNewer(installed: "0.1.3", remote: "0.1.3"), "same version is not newer")
+}
+
 @MainActor
 func storeChecks() {
+    let dir = FileManager.default.temporaryDirectory
+        .appendingPathComponent("mous-store-\(UUID().uuidString)", isDirectory: true)
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    defer {
+        MousConfigFile.directoryOverride = nil
+        try? FileManager.default.removeItem(at: dir)
+    }
+    MousConfigFile.directoryOverride = dir
+    var cfg = MousConfigFile.ensure()
+    cfg.currency = "uah"
+    MousConfigFile.save(cfg)
+
     let store = AppStore()
     Check.true(store.showLaunchSplash, "fresh store shows launch splash")
     Check.equal(store.hasLoadedDashboard, false)
+    Check.equal(store.displayCurrencyCode, "UAH")
 }

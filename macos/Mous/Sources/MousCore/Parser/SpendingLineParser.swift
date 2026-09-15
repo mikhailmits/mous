@@ -256,6 +256,9 @@ public enum SpendingLineParser {
         if currencies.count == 1 {
             return .ok(currencies[0])
         }
+        if let marked = currencies.first(where: { $0.isDefault }) {
+            return .ok(marked)
+        }
         if let eur = currencies.first(where: { $0.symbol.lowercased() == "eur" }) {
             return .ok(eur)
         }

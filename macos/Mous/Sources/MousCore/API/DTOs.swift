@@ -28,6 +28,16 @@ struct CurrencyDTO: Decodable {
     }
 }
 
+struct CurrencyCreateDTO: Encodable {
+    var symbol: String
+    var name: String
+    var isDefault: Bool
+}
+
+struct CurrencyPatchDTO: Encodable {
+    var isDefault: Bool
+}
+
 struct CategoryDTO: Decodable {
     var id: Int
     var name: String
@@ -74,6 +84,7 @@ struct TransactionCreateDTO: Encodable {
     var currencyId: Int
     var accountId: Int?
     var occurredUnixTime: Int
+    var categoryId: Int?
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
@@ -84,6 +95,9 @@ struct TransactionCreateDTO: Encodable {
         if let accountId {
             try container.encode(accountId, forKey: .accountId)
         }
+        if let categoryId {
+            try container.encode(categoryId, forKey: .categoryId)
+        }
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -92,5 +106,14 @@ struct TransactionCreateDTO: Encodable {
         case currencyId
         case accountId
         case occurredUnixTime
+        case categoryId
     }
+}
+
+struct TransactionPatchDTO: Encodable {
+    var categoryId: Int
+}
+
+struct CategoryCreateDTO: Encodable {
+    var name: String
 }

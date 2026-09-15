@@ -128,6 +128,96 @@ func apiClientChecks() async {
         Check.fail("missing categories catalog should be empty: \(error)")
     }
 
+    capturedBody.value = nil
+    StubURLProtocol.handler = { request in
+        capturedBody.value = requestBody(request)
+        return (201, Data(#"{"id":7,"name":"coffee"}"#.utf8))
+    }
+    do {
+        let cat = try await client.createCategory(name: "coffee")
+        Check.equal(cat.id, 7)
+        Check.equal(cat.name, "coffee")
+        guard let body = capturedBody.value,
+              let json = try JSONSerialization.jsonObject(with: body) as? [String: Any]
+        else {
+            Check.fail("missing createCategory body")
+            return
+        }
+        Check.equal(json["name"] as? String ?? "", "coffee")
+    } catch {
+        Check.fail("createCategory failed: \(error)")
+    }
+
+    StubURLProtocol.handler = { _ in
+        return (200, Data(#"{"id":7,"name":"coffee"}"#.utf8))
+    }
+    do {
+        let cat = try await client.category(named: "coffee")
+        Check.equal(cat?.id ?? -1, 7)
+    } catch {
+        Check.fail("category(named:) failed: \(error)")
+    }
+
+    StubURLProtocol.handler = { _ in
+        return (404, Data(#"{"detail":"Not Found"}"#.utf8))
+    }
+    do {
+        let cat = try await client.category(named: "missing")
+        Check.true(cat == nil, "missing category is nil")
+    } catch {
+        Check.fail("missing category should be nil: \(error)")
+    }
+
+    capturedBody.value = nil
+    StubURLProtocol.handler = { request in
+        capturedBody.value = requestBody(request)
+        let body = """
+        {"id":3,"name":"coffee","value":-4,"currency_id":1,"account_id":1,"occurred_unix_time":1757289600,"category_id":7}
+        """
+        return (200, Data(body.utf8))
+    }
+    do {
+        let tx = try await client.patchTransaction(id: 3, categoryID: 7)
+        Check.equal(tx.categoryID ?? -1, 7)
+        guard let body = capturedBody.value,
+              let json = try JSONSerialization.jsonObject(with: body) as? [String: Any]
+        else {
+            Check.fail("missing patchTransaction body")
+            return
+        }
+        Check.equal((json["category_id"] as? NSNumber)?.intValue ?? -1, 7)
+    } catch {
+        Check.fail("patchTransaction failed: \(error)")
+    }
+
+    capturedBody.value = nil
+    StubURLProtocol.handler = { request in
+        capturedBody.value = requestBody(request)
+        let body = """
+        {"id":9,"name":"coffee","value":-4,"currency_id":1,"account_id":1,"occurred_unix_time":1757289600,"category_id":7}
+        """
+        return (201, Data(body.utf8))
+    }
+    do {
+        _ = try await client.createTransaction(
+            description: "coffee",
+            value: -4,
+            currencyID: 1,
+            occurredOn: date,
+            categoryID: 7
+        )
+        guard let body = capturedBody.value,
+              let json = try JSONSerialization.jsonObject(with: body) as? [String: Any]
+        else {
+            Check.fail("missing POST body with category_id")
+            return
+        }
+        Check.equal((json["category_id"] as? NSNumber)?.intValue ?? -1, 7)
+        Check.true(json["account_id"] == nil, "account_id still omitted")
+    } catch {
+        Check.fail("createTransaction with categoryID failed: \(error)")
+    }
+
     StubURLProtocol.handler = { _ in
         let body = """
         {"id":3,"name":"coffee","value":-12.5,"currency_id":1,"account_id":1,"occurred_unix_time":1757289600,"category_id":1}
@@ -144,6 +234,66 @@ func apiClientChecks() async {
         Check.equal(tx.categoryID ?? -1, 1)
     } catch {
         Check.fail("createTransaction with category_id failed: \(error)")
+    }
+
+    capturedBody.value = nil
+    let capturedMethod = LockBox<String?>(nil)
+    let capturedPath = LockBox<String?>(nil)
+    StubURLProtocol.handler = { request in
+        capturedBody.value = requestBody(request)
+        capturedMethod.value = request.httpMethod
+        capturedPath.value = request.url?.path
+        let body = """
+        {"id":4,"symbol":"usd","name":"US Dollar","is_default":true}
+        """
+        return (201, Data(body.utf8))
+    }
+    do {
+        let currency = try await client.createCurrency(symbol: "usd", name: "US Dollar", isDefault: true)
+        Check.equal(currency.symbol, "usd")
+        Check.equal(currency.name, "US Dollar")
+        Check.true(currency.isDefault)
+        Check.equal(capturedMethod.value ?? "", "POST")
+        Check.true(capturedPath.value?.hasSuffix("/currencies") == true, "POST /currencies")
+        guard let body = capturedBody.value,
+              let json = try JSONSerialization.jsonObject(with: body) as? [String: Any]
+        else {
+            Check.fail("missing createCurrency body")
+            return
+        }
+        Check.equal(json["symbol"] as? String ?? "", "usd")
+        Check.equal(json["name"] as? String ?? "", "US Dollar")
+        Check.equal((json["is_default"] as? NSNumber)?.boolValue ?? false, true)
+    } catch {
+        Check.fail("createCurrency failed: \(error)")
+    }
+
+    capturedBody.value = nil
+    StubURLProtocol.handler = { request in
+        capturedBody.value = requestBody(request)
+        capturedMethod.value = request.httpMethod
+        capturedPath.value = request.url?.path
+        let body = """
+        {"id":1,"symbol":"eur","name":"Euro","is_default":true}
+        """
+        return (200, Data(body.utf8))
+    }
+    do {
+        let currency = try await client.setDefaultCurrency(id: 1)
+        Check.equal(currency.id, 1)
+        Check.true(currency.isDefault)
+        Check.equal(capturedMethod.value ?? "", "PATCH")
+        Check.true(capturedPath.value?.hasSuffix("/currencies/1") == true, "PATCH /currencies/1")
+        guard let body = capturedBody.value,
+              let json = try JSONSerialization.jsonObject(with: body) as? [String: Any]
+        else {
+            Check.fail("missing setDefaultCurrency body")
+            return
+        }
+        Check.equal((json["is_default"] as? NSNumber)?.boolValue ?? false, true)
+        Check.true(json["symbol"] == nil, "patch should only send is_default")
+    } catch {
+        Check.fail("setDefaultCurrency failed: \(error)")
     }
 
     await finiteJSONChecks(session: session, date: date)

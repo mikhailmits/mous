@@ -82,6 +82,22 @@ public actor APIClient {
         return dto.items.map(\.domain)
     }
 
+    public func createCurrency(symbol: String, name: String, isDefault: Bool) async throws -> Currency {
+        let payload = CurrencyCreateDTO(symbol: symbol, name: name, isDefault: isDefault)
+        let body = try encoder.encode(payload)
+        let url = baseURL.appending(path: "currencies")
+        let dto: CurrencyDTO = try await request(url: url, method: "POST", body: body)
+        return dto.domain
+    }
+
+    public func setDefaultCurrency(id: Int) async throws -> Currency {
+        let payload = CurrencyPatchDTO(isDefault: true)
+        let body = try encoder.encode(payload)
+        let url = baseURL.appending(path: "currencies").appending(path: String(id))
+        let dto: CurrencyDTO = try await request(url: url, method: "PATCH", body: body)
+        return dto.domain
+    }
+
     public func categories() async throws -> [Category] {
         do {
             let dto: CollectionDTO<CategoryDTO> = try await get(path: "/categories")
@@ -111,12 +127,33 @@ public actor APIClient {
         return try dto.items.map { try $0.domain() }
     }
 
+    public func createCategory(name: String) async throws -> Category {
+        let payload = CategoryCreateDTO(name: name)
+        let body = try encoder.encode(payload)
+        let url = baseURL.appending(path: "categories")
+        let dto: CategoryDTO = try await request(url: url, method: "POST", body: body)
+        return dto.domain
+    }
+
+    public func category(named name: String) async throws -> Category? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        do {
+            let url = baseURL.appending(path: "categories").appending(path: trimmed)
+            let dto: CategoryDTO = try await request(url: url, method: "GET", body: nil)
+            return dto.domain
+        } catch APIError.server(let status, _, _) where status == 404 {
+            return nil
+        }
+    }
+
     public func createTransaction(
         description: String,
         value: Double,
         currencyID: Int,
         occurredOn: CivilDate,
-        accountID: Int? = nil
+        accountID: Int? = nil,
+        categoryID: Int? = nil
     ) async throws -> Transaction {
         guard value.isFinite, value != 0 else { throw APIError.undecodable }
         let payload = TransactionCreateDTO(
@@ -124,11 +161,20 @@ public actor APIClient {
             value: value,
             currencyId: currencyID,
             accountId: accountID,
-            occurredUnixTime: occurredOn.unixUTCMidnight
+            occurredUnixTime: occurredOn.unixUTCMidnight,
+            categoryId: categoryID
         )
         let body = try encoder.encode(payload)
         let url = baseURL.appending(path: "transactions")
         let dto: TransactionDTO = try await request(url: url, method: "POST", body: body)
+        return try dto.domain()
+    }
+
+    public func patchTransaction(id: Int, categoryID: Int) async throws -> Transaction {
+        let payload = TransactionPatchDTO(categoryId: categoryID)
+        let body = try encoder.encode(payload)
+        let url = baseURL.appending(path: "transactions").appending(path: String(id))
+        let dto: TransactionDTO = try await request(url: url, method: "PATCH", body: body)
         return try dto.domain()
     }
 

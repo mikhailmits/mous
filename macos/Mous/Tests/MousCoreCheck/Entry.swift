@@ -6,10 +6,15 @@ struct MousCoreCheck {
     static func main() async {
         parserChecks()
         dashboardChecks()
+        moneyDisplayChecks()
+        repeatCategoryChecks()
         accountChecks()
         loopbackChecks()
         civilDateChecks()
         spendRankChecks()
+        configChecks()
+        summaryReportChecks()
+        updateVersionChecks()
         await storeChecks()
         await apiClientChecks()
         if Check.failures > 0 {

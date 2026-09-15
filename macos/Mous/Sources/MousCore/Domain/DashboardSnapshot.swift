@@ -26,21 +26,32 @@ public struct DashboardSnapshot: Equatable, Sendable {
     public static func compute(
         balance: Double,
         goods: [Transaction],
-        today: CivilDate
+        today: CivilDate,
+        displayCode: String = "EUR",
+        currencyCodeByID: [Int: String] = [:],
+        fx: FXBook = .identity
     ) -> DashboardSnapshot {
         var spentToday = 0.0
         var spentMonth = 0.0
         var incomeMonth = 0.0
         for good in goods {
             guard good.signedValue.isFinite else { continue }
-            if good.isExpense {
-                let magnitude = -good.signedValue
+            let source = currencyCodeByID[good.currencyID] ?? displayCode
+            let signed = MoneyDisplay.convert(
+                good.signedValue,
+                from: source,
+                to: displayCode,
+                using: fx
+            )
+            guard signed.isFinite else { continue }
+            if signed < 0 {
+                let magnitude = -signed
                 spentMonth += magnitude
                 if good.civilDate == today {
                     spentToday += magnitude
                 }
-            } else if good.isIncome {
-                incomeMonth += good.signedValue
+            } else if signed > 0 {
+                incomeMonth += signed
             }
         }
         let saved: Double?
