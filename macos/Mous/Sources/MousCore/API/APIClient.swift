@@ -107,9 +107,9 @@ public actor APIClient {
         }
     }
 
-    public func balance(accountID: Int) async throws -> Double {
+    public func balance(accountID: Int) async throws -> AccountBalance {
         let dto: BalanceDTO = try await get(path: "/accounts/\(accountID)/balance")
-        return try dto.amountValue()
+        return try dto.domain()
     }
 
     public func transactions(accountID: Int, from: CivilDate, to: CivilDate) async throws -> [Transaction] {

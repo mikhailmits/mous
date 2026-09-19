@@ -26,11 +26,21 @@ public final class AppStore {
     public private(set) var outgoingLine = ""
 
     public var currenciesLoading = true
-    /// ISO 4217 code for on-screen amounts. Conversion uses `MoneyDisplay.book`
-    /// when quotes exist; missing pairs stay identity.
+    /// ISO 4217 code for on-screen amounts. Conversion uses `MoneyDisplay.book`;
+    /// missing pairs are omitted from totals instead of treated as 1:1.
     public private(set) var displayCurrencyCode: String
+    /// Settings: scramble spent, left, history, and most-expensive amounts.
+    public private(set) var hideBalance = false
 
     private var currencies: [Currency] = []
+    private var currencyCodes: [Int: String] = [:]
+    /// API balance already converted to `ledgerBalanceCode`. Used only when
+    /// `ledgerParts` is empty.
+    private var ledgerBalance: Double = 0
+    /// ISO code for `ledgerBalance` (`GET .../balance` `currency`).
+    private var ledgerBalanceCode: String?
+    /// Per-currency signed nets from `GET .../balance` `by_currency`.
+    private var ledgerParts: [CurrencyAmount] = []
     private var mainAccount: Account?
     private var loadGeneration = 0
     private let client: APIClient
@@ -45,7 +55,9 @@ public final class AppStore {
         self.client = client
         self.timeZone = timeZone
         self.now = now
-        self.displayCurrencyCode = MousCurrencyPref.isoCode(for: MousConfigFile.load().currency)
+        let cfg = MousConfigFile.load()
+        self.displayCurrencyCode = MousCurrencyPref.isoCode(for: cfg.currency)
+        self.hideBalance = cfg.hideBalance
     }
 
     public var presentation: EntryPresentation {
@@ -54,6 +66,10 @@ public final class AppStore {
             returnFailed: returnFailed,
             currenciesLoading: currenciesLoading
         )
+    }
+
+    public var isFxCalcReady: Bool {
+        FxCalcParser.kind(line: text, currencies: currencies) == .ready
     }
 
     public var fieldDisabled: Bool { isSubmitting }
@@ -75,19 +91,52 @@ public final class AppStore {
     }
 
     /// Re-read Settings currency when home is shown again. `appear` only
-    /// runs once from `MousPopup.task`.
+    /// runs once from `MousPopup.task`. Figures convert locally first so the
+    /// dashboard does not wait on the default-currency PATCH.
     public func reloadPreferences() async {
         applyDisplayCurrencyFromConfig()
+        applyDisplayedFigures()
         do {
             try await loadCurrenciesAndAccount()
+            rememberCurrencyCodes()
+            if let mainAccount {
+                let loadedBalance = try await client.balance(accountID: mainAccount.id)
+                ledgerBalance = loadedBalance.amount
+                ledgerBalanceCode = loadedBalance.currency
+                    ?? currencies.first(where: { $0.isDefault })?.symbol
+                ledgerParts = loadedBalance.byCurrency.compactMap { part in
+                    guard let code = currencyCodes[part.currencyID] else { return nil }
+                    return CurrencyAmount(code: code, amount: part.amount)
+                }
+            }
+            applyDisplayedFigures()
             reparse(clearFailed: false)
         } catch {
-            // Display already follows config; parser keeps the last default.
+            reparse(clearFailed: false)
+        }
+    }
+
+    /// Tab / Enter: `{amount}{from} to {to}` becomes `{amount}{to}` and does not post.
+    @discardableResult
+    public func applyFxCalc() -> Bool {
+        switch FxCalcParser.apply(line: text, currencies: currencies) {
+        case .notCalc:
+            return false
+        case .converted(let line):
+            returnFailed = false
+            text = line
+            reparse(clearFailed: true)
+            return true
+        case .failed:
+            returnFailed = true
+            rejectTick += 1
+            return true
         }
     }
 
     public func submit() async {
         guard !isSubmitting else { return }
+        if applyFxCalc() { return }
         isSubmitting = true
         defer { isSubmitting = false }
         if currencies.isEmpty {
@@ -105,6 +154,7 @@ public final class AppStore {
                     statusMessage = APIError.transport.userMessage
                 }
             }
+            if applyFxCalc() { return }
         }
         reparse(clearFailed: false)
         let posted: Bool
@@ -135,6 +185,7 @@ public final class AppStore {
 
     private func post(_ draft: ParsedDraft) async -> Bool {
         statusMessage = nil
+        let submitted = text
         var attempt = 0
         while true {
             do {
@@ -156,9 +207,11 @@ public final class AppStore {
                     await backfillCategory(categoryID, named: draft.description)
                 }
                 loadGeneration += 1
-                outgoingLine = text
-                text = ""
-                parseResult = .empty
+                outgoingLine = submitted
+                if text == submitted {
+                    text = ""
+                    parseResult = .empty
+                }
                 commitTick += 1
                 return true
             } catch let error as APIError where error.isUnreachable {
@@ -204,17 +257,16 @@ public final class AppStore {
                 async let categoryList = client.categories()
                 let goodsList = try await goods
                 let loadedCategories = try await categoryList
-                let codes = Dictionary(uniqueKeysWithValues: currencies.map { ($0.id, $0.symbol) })
-                let snapshot = DashboardSnapshot.compute(
-                    balance: try await balance,
-                    goods: goodsList,
-                    today: today,
-                    displayCode: displayCurrencyCode,
-                    currencyCodeByID: codes,
-                    fx: MoneyDisplay.book
-                )
+                let loadedBalance = try await balance
+                rememberCurrencyCodes()
+                ledgerBalance = loadedBalance.amount
+                ledgerBalanceCode = loadedBalance.currency
+                    ?? currencies.first(where: { $0.isDefault })?.symbol
+                ledgerParts = loadedBalance.byCurrency.compactMap { part in
+                    guard let code = currencyCodes[part.currencyID] else { return nil }
+                    return CurrencyAmount(code: code, amount: part.amount)
+                }
                 guard generation == loadGeneration else { return }
-                self.snapshot = snapshot
                 categories = loadedCategories
                 monthTransactions = goodsList
                     .filter { $0.signedValue.isFinite }
@@ -222,10 +274,7 @@ public final class AppStore {
                         if $0.civilDate != $1.civilDate { return $1.civilDate < $0.civilDate }
                         return $0.id > $1.id
                     }
-                expensiveMonthRows = SpendRank.mostExpensive(
-                    transactions: displayed(monthTransactions),
-                    categories: categories
-                )
+                applyDisplayedFigures(today: today)
                 hasLoadedDashboard = true
                 if statusMessage == APIError.transport.userMessage
                     || statusMessage == APIError.timeout.userMessage
@@ -288,15 +337,43 @@ public final class AppStore {
         mainAccount = preferred
     }
 
-    public func displayedAmount(_ signedValue: Double, currencyID: Int) -> Double {
-        let from = currencies.first { $0.id == currencyID }?.symbol ?? displayCurrencyCode
+    public func displayedAmount(_ signedValue: Double, currencyID: Int) -> Double? {
+        guard let from = currencyCodes[currencyID]
+            ?? currencies.first(where: { $0.id == currencyID })?.symbol
+        else { return nil }
         return MoneyDisplay.convert(signedValue, from: from, to: displayCurrencyCode)
     }
 
+    private func rememberCurrencyCodes() {
+        currencyCodes = Dictionary(uniqueKeysWithValues: currencies.map { ($0.id, $0.symbol) })
+    }
+
+    private func applyDisplayedFigures(today: CivilDate? = nil) {
+        let day = today ?? CivilDate.localToday(timeZone: timeZone, now: now())
+        snapshot = DashboardSnapshot.compute(
+            balance: ledgerBalance,
+            goods: monthTransactions,
+            today: day,
+            displayCode: displayCurrencyCode,
+            currencyCodeByID: currencyCodes,
+            fx: MoneyDisplay.book,
+            balanceCode: ledgerBalanceCode
+                ?? currencies.first(where: { $0.isDefault })?.symbol,
+            balances: ledgerParts
+        )
+        expensiveMonthRows = SpendRank.mostExpensive(
+            transactions: displayed(monthTransactions),
+            categories: categories
+        )
+    }
+
     private func displayed(_ goods: [Transaction]) -> [Transaction] {
-        goods.map { tx in
+        goods.compactMap { tx in
+            guard let amount = displayedAmount(tx.signedValue, currencyID: tx.currencyID) else {
+                return nil
+            }
             var copy = tx
-            copy.signedValue = displayedAmount(tx.signedValue, currencyID: tx.currencyID)
+            copy.signedValue = amount
             return copy
         }
     }
@@ -338,7 +415,7 @@ public final class AppStore {
             do {
                 _ = try await client.patchTransaction(id: tx.id, categoryID: categoryID)
             } catch {
-                return
+                continue
             }
         }
     }
@@ -352,7 +429,9 @@ public final class AppStore {
     }
 
     private func applyDisplayCurrencyFromConfig() {
-        displayCurrencyCode = MousCurrencyPref.isoCode(for: MousConfigFile.load().currency)
+        let cfg = MousConfigFile.load()
+        displayCurrencyCode = MousCurrencyPref.isoCode(for: cfg.currency)
+        hideBalance = cfg.hideBalance
     }
 
     /// Make config `currency` the API default so unsuffixed quick-entry uses it.

@@ -25,7 +25,7 @@ from mous.db.utils.currencies import (
     update_currency_symbol,
 )
 from mous.db.utils.bootstrap import ensure_defaults
-from mous.db.utils.errors import LastAccountError
+from mous.db.utils.errors import LastAccountError, LastDefaultError
 from mous.db.utils.goods import (
     create_good,
     delete_good,
@@ -48,6 +48,7 @@ from mous.db.utils.recurring import (
 __all__ = [
     "ensure_defaults",
     "LastAccountError",
+    "LastDefaultError",
     "create_account",
     "create_category",
     "create_currency",

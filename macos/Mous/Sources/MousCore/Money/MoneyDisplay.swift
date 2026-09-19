@@ -1,9 +1,21 @@
 import Foundation
 
-/// In-memory quotes for later live FX. Lookups are a dictionary hit;
-/// missing pairs stay identity so totals never block on a rate fetch.
+/// In-memory quotes for display FX. Lookups are a dictionary hit.
+/// Missing pairs return nil so totals never pretend 1:1 across currencies.
 public struct FXBook: Equatable, Sendable {
     public static let identity = FXBook()
+
+    /// Stand-in EUR-pivoted quotes until a live feed exists.
+    /// `EUR→USD` 1.1, `EUR→UAH` 40; cross pairs go through EUR.
+    public static let stub: FXBook = {
+        var book = FXBook()
+        book.set(base: "EUR", quote: "USD", rate: 1.1)
+        book.set(base: "EUR", quote: "UAH", rate: 40)
+        return book
+    }()
+
+    /// Pivot used when a ledger bucket has no currency of its own.
+    public static let pivotCode = "EUR"
 
     private var rates: [String: Double]
 
@@ -21,23 +33,28 @@ public struct FXBook: Equatable, Sendable {
         rates[Self.key(dst, src)] = 1 / rate
     }
 
-    public func convert(_ amount: Double, from: String, to: String) -> Double {
-        guard amount.isFinite else { return amount }
+    /// Quote units of `to` per one `from`. Same currency is 1. Missing pair is nil.
+    public func quote(from: String, to: String) -> Double? {
         let src = Self.normalized(from)
         let dst = Self.normalized(to)
-        if src == dst { return amount }
-        if let rate = rates[Self.key(src, dst)] {
-            let converted = amount * rate
-            return converted.isFinite ? converted : amount
+        if src == dst { return 1 }
+        if let rate = rates[Self.key(src, dst)], rate.isFinite, rate > 0 {
+            return rate
         }
         if src != "EUR", dst != "EUR",
            let toEUR = rates[Self.key(src, "EUR")],
            let fromEUR = rates[Self.key("EUR", dst)]
         {
-            let converted = amount * toEUR * fromEUR
-            return converted.isFinite ? converted : amount
+            let crossed = toEUR * fromEUR
+            return crossed.isFinite && crossed > 0 ? crossed : nil
         }
-        return amount
+        return nil
+    }
+
+    public func convert(_ amount: Double, from: String, to: String) -> Double? {
+        guard amount.isFinite, let rate = quote(from: from, to: to) else { return nil }
+        let converted = amount * rate
+        return converted.isFinite ? converted : nil
     }
 
     public var isEmpty: Bool { rates.isEmpty }
@@ -51,11 +68,15 @@ public struct FXBook: Equatable, Sendable {
     }
 }
 
-/// Display-currency conversion. Plug quotes into `book` later; until then
-/// every amount is returned unchanged (fast path).
+/// Display-currency conversion. The app installs `FXBook.stub` at launch;
+/// tests can swap `book` for `.identity`.
 public enum MoneyDisplay {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var stored = FXBook.identity
+
+    public static func useStubQuotes() {
+        book = .stub
+    }
 
     public static var book: FXBook {
         get {
@@ -75,7 +96,7 @@ public enum MoneyDisplay {
         from: String,
         to: String,
         using book: FXBook? = nil
-    ) -> Double {
+    ) -> Double? {
         (book ?? Self.book).convert(amount, from: from, to: to)
     }
 }

@@ -11,6 +11,8 @@ public struct MousConfig: Codable, Equatable, Sendable {
     public var currency: String
     public var notifyInApp: Bool
     public var notifyMacOS: Bool
+    public var hideBalance: Bool
+    public var hideBalanceStyle: String
 
     enum CodingKeys: String, CodingKey {
         case host
@@ -22,6 +24,8 @@ public struct MousConfig: Codable, Equatable, Sendable {
         case currency
         case notifyInApp = "notify_in_app"
         case notifyMacOS = "notify_macos"
+        case hideBalance = "hide_balance"
+        case hideBalanceStyle = "hide_balance_style"
     }
 
     public init(
@@ -33,7 +37,9 @@ public struct MousConfig: Codable, Equatable, Sendable {
         theme: String,
         currency: String,
         notifyInApp: Bool = true,
-        notifyMacOS: Bool = true
+        notifyMacOS: Bool = true,
+        hideBalance: Bool = false,
+        hideBalanceStyle: String = "scramble"
     ) {
         self.host = host
         self.port = port
@@ -44,6 +50,8 @@ public struct MousConfig: Codable, Equatable, Sendable {
         self.currency = currency
         self.notifyInApp = notifyInApp
         self.notifyMacOS = notifyMacOS
+        self.hideBalance = hideBalance
+        self.hideBalanceStyle = hideBalanceStyle
     }
 
     public init(from decoder: Decoder) throws {
@@ -57,6 +65,8 @@ public struct MousConfig: Codable, Equatable, Sendable {
         currency = try container.decodeIfPresent(String.self, forKey: .currency) ?? "eur"
         notifyInApp = try container.decodeIfPresent(Bool.self, forKey: .notifyInApp) ?? true
         notifyMacOS = try container.decodeIfPresent(Bool.self, forKey: .notifyMacOS) ?? true
+        hideBalance = try container.decodeIfPresent(Bool.self, forKey: .hideBalance) ?? false
+        hideBalanceStyle = try container.decodeIfPresent(String.self, forKey: .hideBalanceStyle) ?? "scramble"
     }
 }
 
@@ -85,7 +95,16 @@ public enum MousCurrencyPref: String, CaseIterable, Identifiable, Sendable {
 
     public var label: String { rawValue.uppercased() }
 
-    /// ISO 4217 code for formatters. Amounts are not converted.
+    /// Tiny mark for Settings chips. Not used for FX.
+    public var glyph: String {
+        switch self {
+        case .usd: return "$"
+        case .eur: return "€"
+        case .uah: return "₴"
+        }
+    }
+
+    /// ISO 4217 code for formatters. Amounts convert through `MoneyDisplay`.
     public var isoCode: String { rawValue.uppercased() }
 
     /// Name sent to `POST /currencies` when the row is missing.
@@ -105,6 +124,26 @@ public enum MousCurrencyPref: String, CaseIterable, Identifiable, Sendable {
     public static func pref(for stored: String) -> MousCurrencyPref {
         let trimmed = stored.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return MousCurrencyPref(rawValue: trimmed) ?? .eur
+    }
+}
+
+/// How hidden amounts render. Default scramble keeps existing `?#*!` glyphs.
+public enum HideBalanceStyle: String, CaseIterable, Identifiable, Sendable {
+    case scramble
+    case veil
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .scramble: return "Scramble"
+        case .veil: return "Dots"
+        }
+    }
+
+    public static func parse(_ stored: String) -> HideBalanceStyle {
+        let trimmed = stored.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return HideBalanceStyle(rawValue: trimmed) ?? .scramble
     }
 }
 
@@ -152,18 +191,49 @@ public enum ReportCadence: String, CaseIterable, Identifiable, Sendable {
 
     /// Same grammar as Python `parse_period`: `14 days`, `week`, `2 weeks`, `month`.
     public static func isValidPeriod(_ text: String) -> Bool {
+        periodMatch(text) != nil
+    }
+
+    /// Civil date when the next report would land if this period starts today.
+    public static func nextReportDate(
+        period: String,
+        from: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Date? {
+        guard let match = periodMatch(period) else { return nil }
+        let start = calendar.startOfDay(for: from)
+        switch match.unit {
+        case "d", "day", "days":
+            return calendar.date(byAdding: .day, value: match.count, to: start)
+        case "w", "week", "weeks":
+            return calendar.date(byAdding: .day, value: match.count * 7, to: start)
+        case "month", "months":
+            return calendar.date(byAdding: .month, value: match.count, to: start)
+        case "y", "year", "years":
+            return calendar.date(byAdding: .year, value: match.count, to: start)
+        default:
+            return nil
+        }
+    }
+
+    private static func periodMatch(_ text: String) -> (count: Int, unit: String)? {
         let raw = text.split { $0.isWhitespace }.joined(separator: " ")
-        guard !raw.isEmpty else { return false }
+        guard !raw.isEmpty else { return nil }
         let range = NSRange(raw.startIndex..., in: raw)
         guard let match = periodRegex.firstMatch(in: raw, range: range),
               match.range.length == (raw as NSString).length
-        else { return false }
+        else { return nil }
+        let ns = raw as NSString
         let countRange = match.range(at: 1)
+        var count = 1
         if countRange.location != NSNotFound {
-            let countText = (raw as NSString).substring(with: countRange)
-            if let count = Int(countText), count < 1 { return false }
+            let countText = ns.substring(with: countRange)
+            guard let parsed = Int(countText), parsed >= 1 else { return nil }
+            count = parsed
         }
-        return true
+        let unitRange = match.range(at: 2)
+        guard unitRange.location != NSNotFound else { return nil }
+        return (count, ns.substring(with: unitRange).lowercased())
     }
 
     private static let periodRegex = try! NSRegularExpression(
@@ -243,7 +313,7 @@ public enum MousConfigFile {
         let cfg = load()
         let required = [
             "host", "port", "database_path", "dev", "report_period", "theme", "currency",
-            "notify_in_app", "notify_macos",
+            "notify_in_app", "notify_macos", "hide_balance", "hide_balance_style",
         ]
         if required.contains(where: { obj[$0] == nil }) {
             save(cfg)
@@ -264,6 +334,7 @@ public enum MousConfigFile {
         if MousTheme(rawValue: cfg.theme) == nil { cfg.theme = "system" }
         cfg.currency = cfg.currency.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if cfg.currency.isEmpty { cfg.currency = "eur" }
+        cfg.hideBalanceStyle = HideBalanceStyle.parse(cfg.hideBalanceStyle).rawValue
         if !(1...65535).contains(cfg.port) {
             cfg.port = min(max(cfg.port, 1), 65535)
         }
@@ -284,6 +355,7 @@ private extension MousConfig {
         cfg.theme = MousTheme(rawValue: theme)?.rawValue ?? "system"
         let currency = cfg.currency.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         cfg.currency = currency.isEmpty ? "eur" : currency
+        cfg.hideBalanceStyle = HideBalanceStyle.parse(cfg.hideBalanceStyle).rawValue
         let path = cfg.databasePath.trimmingCharacters(in: .whitespacesAndNewlines)
         if !path.isEmpty { cfg.databasePath = path }
         return cfg

@@ -12,6 +12,8 @@ from datetime import date, datetime
 
 from oxyde import Field, Model
 
+from mous.fx import convert as fx_convert
+
 CURRENCY_SYMBOL_MAX_LENGTH = 8
 CURRENCY_NAME_MAX_LENGTH = 64
 GOOD_NAME_MAX_LENGTH = 128
@@ -37,6 +39,20 @@ class Currency(Primary):
     class Meta:
         is_table = True
 
+    @classmethod
+    async def fx_context(cls) -> tuple[str, dict[int, str]]:
+        """Default symbol plus id→symbol for converting stored amounts."""
+        rows = await cls.objects.all()
+        codes: dict[int, str] = {}
+        default = "eur"
+        for row in rows:
+            if row.id is None:
+                continue
+            codes[row.id] = row.symbol
+            if row.is_default:
+                default = row.symbol
+        return default, codes
+
 
 class Account(Primary):
     """Spending or tracking account that owns goods."""
@@ -52,27 +68,71 @@ class Account(Primary):
         is_table = True
 
     async def get_balance(self) -> float:
-        """Signed net of this account's goods, in each good's own currency.
+        """Signed net in the default currency (EUR/USD/UAH stub FX).
 
-        Positive goods (income) add; negative goods (expenses) subtract.
-        Mixed currencies are not converted.
+        Unquoted currencies are omitted. ``get_balance_parts`` is still native.
         """
+        total, _ = await self.get_balance_in_default()
+        return total
+
+    async def get_balance_in_default(self) -> tuple[float, str]:
+        """Converted signed net plus the default currency symbol."""
+        parts, _ = await self.get_balance_parts()
+        default, codes = await Currency.fx_context()
+        total = 0.0
+        for currency_id, amount in parts:
+            src = codes.get(currency_id)
+            if src is None:
+                continue
+            converted = fx_convert(amount, src, default)
+            if converted is None:
+                continue
+            total += converted
+        return total, default
+
+    async def get_balance_parts(self) -> tuple[list[tuple[int, float]], float]:
+        """Per-currency signed nets (native) plus the naive mixed total."""
         goods = await self._goods_query().all()
-        return self._sum(goods)
+        buckets: dict[int, float] = {}
+        for good in goods:
+            cid = good.currency_id
+            if cid is None:
+                continue
+            buckets[cid] = buckets.get(cid, 0.0) + good.value
+        parts = sorted(buckets.items())
+        return parts, sum(amount for _, amount in parts)
 
     async def get_spent_on(
         self,
         from_: date | datetime | None = None,
         to_: date | datetime | None = None,
     ) -> float:
-        """Expense magnitude in ``[from_, to_]`` (today if omitted).
+        """Expense magnitude in the default currency for ``[from_, to_]``.
 
-        Goods are signed transactions: ``value < 0`` is an expense, ``value > 0``
-        is income. Only expenses count here. Income is ignored. Result is >= 0.
-        Mixed currencies are not converted.
+        Income is ignored. Result is >= 0. Unquoted currencies are omitted.
         """
+        amount, _ = await self.get_spent_in_default(from_, to_)
+        return amount
+
+    async def get_spent_in_default(
+        self,
+        from_: date | datetime | None = None,
+        to_: date | datetime | None = None,
+    ) -> tuple[float, str]:
         goods = await self._period_query(from_, to_).all()
-        return self._sum_spent(goods)
+        default, codes = await Currency.fx_context()
+        spent = 0.0
+        for good in goods:
+            if good.value >= 0:
+                continue
+            src = codes.get(good.currency_id) if good.currency_id is not None else None
+            if src is None:
+                continue
+            converted = fx_convert(good.value, src, default)
+            if converted is None or converted >= 0:
+                continue
+            spent += -converted
+        return spent, default
 
     async def get_goods(
         self,

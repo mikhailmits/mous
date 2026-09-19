@@ -26,6 +26,9 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
     /// Keyboard shortcut opened the tip; keep it until dismiss, not just hover.
     private var tipPinned = false
     private var commandHintGeneration = 0
+    /// Last flags from a local event. Synthetic pid-posted command keys do
+    /// not show up in `NSEvent.modifierFlags`.
+    private var lastHintFlags: NSEvent.ModifierFlags = []
 
     init(store: AppStore, reportNotice: ReportNoticeChrome) {
         self.store = store
@@ -36,9 +39,12 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.hide() }
+            Task { @MainActor in
+                guard let self, !MousHarness.keepsPanelVisible else { return }
+                self.hide()
+            }
         }
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { [weak self] event in
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown, .mouseMoved]) { [weak self] event in
             guard let self else { return event }
             return self.handleLocalEvent(event)
         }
@@ -60,11 +66,28 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
             window = makeWindow()
         }
         guard let window else { return }
+        if MousHarness.isHeadless {
+            concealHeadless(window)
+            window.acceptsMouseMovedEvents = true
+            window.orderFrontRegardless()
+            hasPositioned = true
+            return
+        }
         if !hasPositioned {
             positionOnScreen(window)
             hasPositioned = true
         }
         stealFocus(window, attempt: 0)
+    }
+
+    /// Invisible and off-screen so the harness never covers the user's display.
+    private func concealHeadless(_ window: NSWindow) {
+        window.alphaValue = 0
+        window.hasShadow = false
+        window.level = .normal
+        window.collectionBehavior.insert(.ignoresCycle)
+        window.collectionBehavior.insert(.stationary)
+        window.setFrameOrigin(NSPoint(x: -20000, y: -20000))
     }
 
     private func stealFocus(_ window: NSWindow, attempt: Int) {
@@ -89,6 +112,7 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
     }
 
     func hide() {
+        if MousHarness.keepsPanelVisible { return }
         guard Date() >= suppressHideUntil else { return }
         // Stay up while the launch spin is playing so `mous dev` from a
         // terminal still shows the animation after the shell takes focus back.
@@ -108,7 +132,7 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
             Task { @MainActor in
                 guard let self else { return }
                 self.observeLaunchSplash()
-                if !self.store.showLaunchSplash, !NSApp.isActive {
+                if !self.store.showLaunchSplash, !NSApp.isActive, !MousHarness.keepsPanelVisible {
                     self.hide()
                 }
             }
@@ -159,6 +183,7 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
         window.animationBehavior = .utilityWindow
         window.isReleasedWhenClosed = false
         window.delegate = self
+        window.title = "Mous"
         window.handleCancel = { [weak self] in self?.handleEscape() ?? false }
         window.contentView = hosting
         window.contentView?.wantsLayer = true
@@ -166,6 +191,9 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
         window.contentView?.layer?.backgroundColor = NSColor.clear.cgColor
         window.contentView?.layer?.masksToBounds = false
         hosting.frame.size = fitting
+        if MousHarness.isHeadless {
+            concealHeadless(window)
+        }
         return window
     }
 
@@ -178,6 +206,12 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
         guard frame.size != size else { return }
         frame.origin.y += frame.height - size.height
         frame.size = size
+        if MousHarness.isHeadless {
+            frame.origin = NSPoint(x: -20000, y: -20000)
+            window.setFrame(frame, display: false)
+            window.alphaValue = 0
+            return
+        }
         window.setFrame(frame, display: true)
         if tipVisible { layoutTip() }
     }
@@ -191,10 +225,26 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
     private static let commandHintDelay: TimeInterval = 0.4
 
     private func handleLocalEvent(_ event: NSEvent) -> NSEvent? {
-        if event.type == .keyDown, event.keyCode == 53, handleEscape() {
-            return nil
+        if event.type == .keyDown, event.keyCode == 53 {
+            if handleEscape() {
+                return nil
+            }
+            if MousHarness.isHeadless {
+                return nil
+            }
         }
-        guard window?.isKeyWindow == true else { return event }
+        if MousHarness.isHeadless, event.type == .mouseMoved {
+            ingestHeadlessMouse(event)
+            return event
+        }
+        if MousHarness.isHeadless, event.type == .keyDown, !event.modifierFlags.contains(.command) {
+            if ingestHeadlessTyping(event) {
+                return nil
+            }
+        }
+        if !MousHarness.isHeadless, window?.isKeyWindow != true {
+            return event
+        }
         switch event.type {
         case .flagsChanged:
             noteCommandFlags(event.modifierFlags)
@@ -206,13 +256,80 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
         }
     }
 
+    /// Headless e2e posts keys to this pid while the panel is not key, so the
+    /// field never becomes first responder. Feed letters into `store.text`.
+    private func ingestHeadlessTyping(_ event: NSEvent) -> Bool {
+        if commandHints.showSettings || commandHints.showNotifications || commandHints.focusedList != nil {
+            return false
+        }
+        if event.keyCode == 36 {
+            Task { await store.submit() }
+            return true
+        }
+        if event.keyCode == 48 {
+            _ = store.applyFxCalc()
+            return true
+        }
+        if event.keyCode == 51 {
+            if !store.text.isEmpty { store.text.removeLast() }
+            return true
+        }
+        if let letter = Self.commandLetter(from: event) {
+            store.text.append(contentsOf: letter)
+            return true
+        }
+        if let chars = event.characters, chars.contains("+") {
+            store.text.append("+")
+            return true
+        }
+        if event.modifierFlags.contains(.shift), event.keyCode == 24 {
+            store.text.append("+")
+            return true
+        }
+        if event.keyCode == 69 {
+            store.text.append("+")
+            return true
+        }
+        if let typed = Self.typingKeyCodes[event.keyCode] {
+            store.text.append(typed)
+            return true
+        }
+        if let raw = event.charactersIgnoringModifiers {
+            let allowed = raw.filter {
+                $0.isNumber || $0 == "." || $0 == " " || $0 == "+" || $0 == "-" || $0 == "\u{2212}"
+            }
+            if !allowed.isEmpty {
+                store.text.append(contentsOf: allowed)
+                return true
+            }
+        }
+        return false
+    }
+
+    private func ingestHeadlessMouse(_ event: NSEvent) {
+        guard let window,
+              commandHints.focusedList == nil,
+              !commandHints.showSettings,
+              !commandHints.showNotifications,
+              !commandHints.showOptionsMenu
+        else { return }
+        let size = window.frame.size
+        guard size.width > 1, size.height > 1 else { return }
+        let loc = event.locationInWindow
+        let xFrac = loc.x / size.width
+        let yFromTop = 1 - (loc.y / size.height)
+        noteSpendHover(xFrac < 0.45 && yFromTop < 0.42)
+        noteSavedHover(xFrac > 0.68 && yFromTop < 0.55 && yFromTop > 0.12)
+    }
+
     private func noteCommandFlags(_ flags: NSEvent.ModifierFlags) {
+        lastHintFlags = flags
         commandHintGeneration += 1
         let generation = commandHintGeneration
         if Self.isCommandOnly(flags) {
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.commandHintDelay) { [weak self] in
                 guard let self, generation == self.commandHintGeneration else { return }
-                guard Self.isCommandOnly(NSEvent.modifierFlags) else { return }
+                guard Self.isCommandOnly(self.lastHintFlags) else { return }
                 guard self.store.hasLoadedDashboard else { return }
                 guard !self.commandHints.showSettings else { return }
                 guard !self.commandHints.showNotifications else { return }
@@ -240,48 +357,101 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
         return relevant == .command
     }
 
-    /// Esc: report detail → inbox; inbox / settings → home; focused list → dashboard; compact tip → dismiss; otherwise let it quit.
+    /// Carbon letter key codes. Synthetic CG events often have an empty
+    /// `charactersIgnoringModifiers`.
+    private static let letterKeyCodes: [UInt16: Character] = [
+        0: "a", 1: "s", 2: "d", 3: "f", 4: "h", 5: "g", 6: "z", 7: "x", 8: "c",
+        9: "v", 11: "b", 12: "q", 13: "w", 14: "e", 15: "r", 16: "y", 17: "t",
+        31: "o", 32: "u", 34: "i", 35: "p", 37: "l", 38: "j", 40: "k",
+        45: "n", 46: "m",
+    ]
+
+    /// Digits and punctuation. Synthetic CG events often have empty `characters`.
+    private static let typingKeyCodes: [UInt16: Character] = [
+        18: "1", 19: "2", 20: "3", 21: "4", 23: "5",
+        22: "6", 26: "7", 28: "8", 25: "9", 29: "0",
+        27: "-", 47: ".", 49: " ",
+    ]
+
+    private static func commandLetter(from event: NSEvent) -> String? {
+        if let raw = event.charactersIgnoringModifiers?.lowercased(),
+           let first = raw.first,
+           first.isLetter
+        {
+            return String(first)
+        }
+        if let ch = letterKeyCodes[event.keyCode] {
+            return String(ch)
+        }
+        return nil
+    }
+
+    /// Esc: ⋯ menu → home; same-key duplicates; clear the entry if home has text;
+    /// then settings / inbox / list / tip; otherwise let it quit.
     private var swallowEscape = false
 
     private func handleEscape() -> Bool {
         if commandHints.showOptionsMenu {
-            withAnimation(hintAnimation) { commandHints.showOptionsMenu = false }
-            swallowEscape = true
-            return true
-        }
-        if commandHints.showSettings {
-            withAnimation(hintAnimation) { commandHints.showSettings = false }
+            withAnimation(optionsCloseAnimation) { commandHints.showOptionsMenu = false }
             NotificationCenter.default.post(name: .mousRestoreInputFocus, object: nil)
-            swallowEscape = true
-            return true
-        }
-        if commandHints.showNotifications {
-            if reportNotice.popSelection() {
-                swallowEscape = true
-                return true
-            }
-            reportNotice.closeInbox()
-            withAnimation(hintAnimation) { commandHints.showNotifications = false }
-            NotificationCenter.default.post(name: .mousRestoreInputFocus, object: nil)
-            swallowEscape = true
-            return true
-        }
-        if commandHints.focusedList != nil {
-            restoreDashboard()
-            swallowEscape = true
-            return true
-        }
-        if tipVisible {
-            tipPinned = false
-            hideTip()
-            swallowEscape = true
+            noteSwallowEscape()
             return true
         }
         if swallowEscape {
             swallowEscape = false
             return true
         }
+        let onHome = !commandHints.showSettings
+            && !commandHints.showNotifications
+            && commandHints.focusedList == nil
+            && !tipVisible
+        if onHome, !store.text.isEmpty {
+            store.text = ""
+            noteSwallowEscape()
+            return true
+        }
+        if commandHints.showSettings {
+            withAnimation(hintAnimation) { commandHints.showSettings = false }
+            NotificationCenter.default.post(name: .mousRestoreInputFocus, object: nil)
+            noteSwallowEscape()
+            return true
+        }
+        if commandHints.showNotifications {
+            if reportNotice.popSelection() {
+                noteSwallowEscape()
+                return true
+            }
+            reportNotice.closeInbox()
+            withAnimation(hintAnimation) { commandHints.showNotifications = false }
+            NotificationCenter.default.post(name: .mousRestoreInputFocus, object: nil)
+            noteSwallowEscape()
+            return true
+        }
+        if commandHints.focusedList != nil {
+            restoreDashboard()
+            noteSwallowEscape()
+            return true
+        }
+        if tipVisible {
+            tipPinned = false
+            hideTip()
+            noteSwallowEscape()
+            return true
+        }
         return false
+    }
+
+    /// Same-key Esc can hit the monitor, `onExitCommand`, and `cancelOperation`.
+    /// Drop the flag on the next turn so the following Esc can clear or quit.
+    private func noteSwallowEscape() {
+        swallowEscape = true
+        DispatchQueue.main.async { [weak self] in
+            self?.swallowEscape = false
+        }
+    }
+
+    private var optionsCloseAnimation: Animation {
+        .easeOut(duration: 0.12)
     }
 
     private func prepareOptionsMenu() {
@@ -314,14 +484,18 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
             return event
         }
         guard !store.showLaunchSplash else { return event }
-        let key = event.charactersIgnoringModifiers?.lowercased()
+        let key = Self.commandLetter(from: event)
+        if MousHarness.isHeadless, key == "a" {
+            store.text = ""
+            return nil
+        }
         if commandHints.showSettings || commandHints.showNotifications {
             return event
         }
         if commandHints.showOptionsMenu {
             switch key {
             case "o":
-                withAnimation(hintAnimation) { commandHints.showOptionsMenu = false }
+                withAnimation(optionsCloseAnimation) { commandHints.showOptionsMenu = false }
                 return nil
             case "s":
                 openSettingsFromShortcut()
@@ -375,12 +549,12 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
         withAnimation(hintAnimation) { commandHints.showNotifications = true }
     }
 
-    /// macOS report banner: open the inbox on the newest unread report.
-    func openFromReportAlert() {
+    /// macOS report banner: open the matching inbox row (or the newest unread).
+    func openFromReportAlert(capturedAt: TimeInterval? = nil) {
         show()
         prepareNotifications()
         withAnimation(hintAnimation) { commandHints.showNotifications = true }
-        reportNotice.selectLatestUnread()
+        reportNotice.selectFromAlert(capturedAt: capturedAt)
     }
 
     /// Demo/screenshot hook (`MOUS_DEMO_TIP`): open and pin a tip exactly
@@ -499,6 +673,9 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
 
         tipVisible = true
         layoutTip()
+        if MousHarness.isHeadless {
+            concealHeadless(tipWindow)
+        }
         tipWindow.orderFront(nil)
 
         if !tipChrome.appeared {
@@ -563,6 +740,10 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
 
     private func layoutTip() {
         guard let parent = window, let tip = tipWindow else { return }
+        if MousHarness.isHeadless {
+            concealHeadless(tip)
+            return
+        }
         let shadow = SpendTipCard.shadowMargin
         let space = usableSpace()
         let reported = tip.frame.size
@@ -574,10 +755,12 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
         let edge = pickEdge()
         let room = max(edge == .above ? space.above : space.below, Self.minTipHeight)
         let maxVisual = min(Self.preferredTipHeight, room)
-        if hoveringSaved {
-            tipChrome.kind = .expensive
-        } else if hoveringSpend {
-            tipChrome.kind = .monthSpend
+        if !tipPinned {
+            if hoveringSaved {
+                tipChrome.kind = .expensive
+            } else if hoveringSpend {
+                tipChrome.kind = .monthSpend
+            }
         }
         tipChrome.edge = edge
         tipChrome.maxHeight = maxVisual
@@ -659,6 +842,9 @@ final class BorderlessPanelController: NSObject, NSWindowDelegate {
         panel.contentView?.layer?.backgroundColor = NSColor.clear.cgColor
         panel.contentView?.layer?.masksToBounds = false
         hosting.frame.size = fitting
+        if MousHarness.isHeadless {
+            concealHeadless(panel)
+        }
         return panel
     }
 

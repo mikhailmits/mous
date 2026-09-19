@@ -21,7 +21,18 @@ func parserChecks() {
         ("-50  grocery", "eur", -50.0, "grocery"),
         ("-50 grocery  shop", "eur", -50.0, "grocery  shop"),
         ("-24UAH idk", "uah", -24.0, "idk"),
-        ("-24 uah", "eur", -24.0, "uah"),
+        ("-24 uah", "uah", -24.0, ""),
+        ("-24 uah latte", "uah", -24.0, "latte"),
+        ("-24 uber", "eur", -24.0, "uber"),
+        ("+ 10 hii", "eur", 10.0, "hii"),
+        ("- 10 hii", "eur", -10.0, "hii"),
+        ("+10hii", "eur", 10.0, "hii"),
+        ("-10hii", "eur", -10.0, "hii"),
+        ("+10eur", "eur", 10.0, ""),
+        ("-50k beer", "eur", -50.0, "k beer"),
+        ("-50grocery", "eur", -50.0, "grocery"),
+        ("-24.5xyz", "eur", -24.5, "xyz"),
+        ("-24uahidk", "eur", -24.0, "uahidk"),
     ]
     for (line, symbol, value, description) in completeCases {
         let result = SpendingLineParser.parse(line: line, currencies: [eur, uah])
@@ -85,6 +96,7 @@ func parserChecks() {
     Check.equal(SpendingLineParser.parse(line: "-0", currencies: [eur]), .incomplete(.bareZero))
     Check.equal(SpendingLineParser.parse(line: "-0.", currencies: [eur]), .incomplete(.trailingDecimal))
     Check.equal(SpendingLineParser.parse(line: "-24u", currencies: [eur, uah]), .incomplete(.currencyPrefix))
+    Check.equal(SpendingLineParser.parse(line: "-24ua", currencies: [eur, uah]), .incomplete(.currencyPrefix))
     Check.equal(
         SpendingLineParser.parse(line: "-24uah ", currencies: [eur, uah]),
         .complete(ParsedDraft(signedValue: -24, currencyID: 2, currencySymbol: "uah", description: ""))
@@ -102,10 +114,14 @@ func parserChecks() {
     Check.equal(SpendingLineParser.parse(line: "-0.0 coffee", currencies: [eur]), .invalid(.zeroAmount))
     Check.equal(SpendingLineParser.parse(line: "-050.20", currencies: [eur]), .invalid(.leadingZeros))
     Check.equal(SpendingLineParser.parse(line: "-1e2", currencies: [eur]), .invalid(.notNumber))
-    Check.equal(SpendingLineParser.parse(line: "-50k beer", currencies: [eur]), .invalid(.unknownCurrency))
-    Check.equal(SpendingLineParser.parse(line: "-24.5xyz", currencies: [eur, uah]), .invalid(.unknownCurrency))
-    Check.equal(SpendingLineParser.parse(line: "-50grocery", currencies: [eur]), .invalid(.unknownCurrency))
-    Check.equal(SpendingLineParser.parse(line: "-24uahidk", currencies: [uah]), .invalid(.unexpectedInput))
+    switch SpendingLineParser.parse(line: "-24uahidk", currencies: [uah]) {
+    case .complete(let draft):
+        Check.equal(draft.currencySymbol, "uah")
+        Check.accuracy(draft.signedValue, -24)
+        Check.equal(draft.description, "uahidk")
+    default:
+        Check.fail("uah then extra letters is a note")
+    }
     Check.equal(SpendingLineParser.parse(line: "+50-20", currencies: [eur]), .invalid(.unexpectedInput))
     Check.equal(SpendingLineParser.parse(line: "-50", currencies: []), .invalid(.noCurrencies))
     Check.equal(
@@ -132,9 +148,84 @@ func parserChecks() {
     let valid = SpendingLineParser.parse(line: "-12.50 lunch", currencies: [eur])
     Check.equal(SpendingLineParser.presentation(valid, returnFailed: false, currenciesLoading: false), .valid)
     let missing = SpendingLineParser.parse(line: "12", currencies: [eur])
-    Check.equal(SpendingLineParser.presentation(missing, returnFailed: false, currenciesLoading: false), .committedInvalid)
+    Check.equal(SpendingLineParser.presentation(missing, returnFailed: false, currenciesLoading: false), .composing)
+    Check.equal(SpendingLineParser.presentation(missing, returnFailed: true, currenciesLoading: false), .committedInvalid)
     let noFx = SpendingLineParser.parse(line: "-50", currencies: [])
     Check.equal(SpendingLineParser.presentation(noFx, returnFailed: false, currenciesLoading: true), .composing)
+    Check.equal(SpendingLineParser.presentation(.empty, returnFailed: false, currenciesLoading: false), .empty)
+    Check.equal(SpendingLineParser.presentation(.empty, returnFailed: true, currenciesLoading: false), .empty)
+    let notNumber = SpendingLineParser.parse(line: "-12.505", currencies: [eur])
+    Check.equal(SpendingLineParser.presentation(notNumber, returnFailed: false, currenciesLoading: false), .composing)
+    Check.equal(SpendingLineParser.presentation(notNumber, returnFailed: true, currenciesLoading: false), .committedInvalid)
+    let unexpected = SpendingLineParser.parse(line: "+50-20", currencies: [eur])
+    Check.equal(SpendingLineParser.presentation(unexpected, returnFailed: false, currenciesLoading: false), .composing)
+    Check.equal(SpendingLineParser.presentation(unexpected, returnFailed: true, currenciesLoading: false), .committedInvalid)
+    Check.equal(SpendingLineParser.presentation(noFx, returnFailed: false, currenciesLoading: false), .composing)
+    Check.equal(SpendingLineParser.presentation(noFx, returnFailed: true, currenciesLoading: false), .committedInvalid)
+    let prefix = SpendingLineParser.parse(line: "-24u", currencies: [eur, uah])
+    Check.equal(SpendingLineParser.presentation(prefix, returnFailed: false, currenciesLoading: false), .composing)
+    Check.equal(SpendingLineParser.presentation(prefix, returnFailed: true, currenciesLoading: false), .committedInvalid)
+}
+
+func fxCalcChecks() {
+    let eur = Currency(id: 1, symbol: "eur", name: "Euro", isDefault: true)
+    let usd = Currency(id: 2, symbol: "usd", name: "US Dollar", isDefault: false)
+    let uah = Currency(id: 3, symbol: "uah", name: "Hryvnia", isDefault: false)
+    let gbp = Currency(id: 4, symbol: "gbp", name: "Pound", isDefault: false)
+    let bag = [eur, usd, uah]
+
+    func expectConverted(_ line: String, _ want: String) {
+        switch FxCalcParser.apply(line: line, currencies: bag, fx: .stub) {
+        case .converted(let got):
+            Check.equal(got, want, line)
+        default:
+            Check.fail("expected converted for \(line)")
+        }
+    }
+
+    expectConverted("10 eur to uah", "400uah")
+    expectConverted("10eur to usd", "11usd")
+    expectConverted("10 eur to usd", "11usd")
+    expectConverted("-10 eur to usd", "-11usd")
+    expectConverted("- 10 eur to usd", "-11usd")
+    expectConverted("+ 10 eur to usd", "+11usd")
+    expectConverted("+10 EUR TO UAH", "+400uah")
+    expectConverted("10.5 eur to usd", "11.55usd")
+    expectConverted("-10 eur to eur", "-10eur")
+    expectConverted("40 uah to usd", "1.1usd")
+    expectConverted("-10 eur  to  usd", "-11usd")
+
+    Check.equal(FxCalcParser.kind(line: "10 eur to usd", currencies: bag, fx: .stub), .ready)
+    Check.equal(FxCalcParser.kind(line: "- 10 eur to usd", currencies: bag, fx: .stub), .ready)
+    Check.equal(FxCalcParser.kind(line: "10eur to usd", currencies: bag, fx: .stub), .ready)
+    Check.equal(FxCalcParser.kind(line: "-50 coffee to go", currencies: bag, fx: .stub), .notCalc)
+    Check.equal(FxCalcParser.kind(line: "10 gbp to eur", currencies: bag + [gbp], fx: .stub), .failed)
+    Check.equal(FxCalcParser.kind(line: "10 gbp to eur", currencies: bag, fx: .stub), .notCalc)
+
+    Check.equal(
+        FxCalcParser.apply(line: "-50 coffee to go", currencies: bag, fx: .stub),
+        .notCalc
+    )
+    Check.equal(
+        FxCalcParser.apply(line: "-10 eur to usd extra", currencies: bag, fx: .stub),
+        .notCalc
+    )
+    Check.equal(
+        FxCalcParser.apply(line: "10 eur to", currencies: bag, fx: .stub),
+        .notCalc
+    )
+    Check.equal(
+        FxCalcParser.apply(line: "-30 coffee with dave", currencies: bag, fx: .stub),
+        .notCalc
+    )
+    Check.equal(
+        FxCalcParser.apply(line: "10 gbp to eur", currencies: bag + [gbp], fx: .stub),
+        .failed
+    )
+    Check.equal(
+        FxCalcParser.apply(line: "10 gbp to eur", currencies: bag, fx: .stub),
+        .notCalc
+    )
 }
 
 func dashboardChecks() {
@@ -211,17 +302,20 @@ func moneyDisplayChecks() {
     defer { MoneyDisplay.book = previous }
     MoneyDisplay.book = .identity
 
-    Check.accuracy(MoneyDisplay.convert(10, from: "EUR", to: "eur"), 10)
-    Check.accuracy(MoneyDisplay.convert(10, from: "EUR", to: "USD"), 10)
+    Check.accuracy(MoneyDisplay.convert(10, from: "EUR", to: "eur") ?? .nan, 10)
+    Check.true(MoneyDisplay.convert(10, from: "EUR", to: "USD") == nil, "missing pair is not 1:1")
 
     var book = FXBook()
     book.set(base: "EUR", quote: "USD", rate: 1.1)
-    Check.accuracy(MoneyDisplay.convert(10, from: "EUR", to: "USD", using: book), 11)
-    Check.accuracy(MoneyDisplay.convert(11, from: "USD", to: "EUR", using: book), 10)
-    Check.accuracy(MoneyDisplay.convert(10, from: "EUR", to: "UAH", using: book), 10)
+    Check.accuracy(MoneyDisplay.convert(10, from: "EUR", to: "USD", using: book) ?? .nan, 11)
+    Check.accuracy(MoneyDisplay.convert(11, from: "USD", to: "EUR", using: book) ?? .nan, 10)
+    Check.true(
+        MoneyDisplay.convert(10, from: "EUR", to: "UAH", using: book) == nil,
+        "unquoted pair is omitted"
+    )
 
     book.set(base: "EUR", quote: "UAH", rate: 40)
-    Check.accuracy(MoneyDisplay.convert(11, from: "USD", to: "UAH", using: book), 400)
+    Check.accuracy(MoneyDisplay.convert(11, from: "USD", to: "UAH", using: book) ?? .nan, 400)
 
     let today = CivilDate(year: 2026, month: 9, day: 8)
     let usdSpend = Transaction(
@@ -250,7 +344,148 @@ func moneyDisplayChecks() {
         displayCode: "EUR",
         currencyCodeByID: [2: "USD"]
     )
-    Check.accuracy(identity.spentToday, 11)
+    Check.accuracy(identity.spentToday, 0)
+    Check.accuracy(identity.spentMonth, 0)
+
+    Check.accuracy(MoneyDisplay.convert(10, from: "EUR", to: "USD", using: .stub) ?? .nan, 11)
+    Check.accuracy(MoneyDisplay.convert(11, from: "USD", to: "EUR", using: .stub) ?? .nan, 10)
+    Check.accuracy(MoneyDisplay.convert(10, from: "EUR", to: "UAH", using: .stub) ?? .nan, 400)
+    Check.accuracy(MoneyDisplay.convert(40, from: "UAH", to: "USD", using: .stub) ?? .nan, 1.1)
+
+    var ignored = FXBook()
+    ignored.set(base: "EUR", quote: "USD", rate: 0)
+    ignored.set(base: "EUR", quote: "USD", rate: .nan)
+    Check.true(ignored.isEmpty, "non-positive rates stay unquoted")
+
+    let eurSpend = Transaction(
+        id: 2,
+        description: "lunch",
+        signedValue: -10,
+        currencyID: 1,
+        accountID: 1,
+        civilDate: today
+    )
+    let eurIncome = Transaction(
+        id: 3,
+        description: "pay",
+        signedValue: 200,
+        currencyID: 1,
+        accountID: 1,
+        civilDate: today
+    )
+    let eurView = DashboardSnapshot.compute(
+        balance: 100,
+        goods: [eurSpend, eurIncome],
+        today: today,
+        displayCode: "EUR",
+        currencyCodeByID: [1: "EUR"],
+        fx: .stub,
+        balanceCode: "EUR"
+    )
+    Check.accuracy(eurView.spentToday, 10)
+    Check.accuracy(eurView.left, 100)
+    Check.accuracy(eurView.savedRatio ?? 0, (200 - 10) / 200)
+
+    let usdView = DashboardSnapshot.compute(
+        balance: 100,
+        goods: [eurSpend, eurIncome],
+        today: today,
+        displayCode: "USD",
+        currencyCodeByID: [1: "EUR"],
+        fx: .stub,
+        balanceCode: "EUR"
+    )
+    Check.accuracy(usdView.spentToday, 11)
+    Check.accuracy(usdView.spentMonth, 11)
+    Check.accuracy(usdView.left, 110)
+    Check.accuracy(usdView.savedRatio ?? 0, (220 - 11) / 220)
+
+    let mixedLeft = DashboardSnapshot.compute(
+        balance: 1989,
+        goods: [eurIncome, usdSpend],
+        today: today,
+        displayCode: "USD",
+        currencyCodeByID: [1: "EUR", 2: "USD"],
+        fx: .stub,
+        balanceCode: "USD",
+        balances: [
+            CurrencyAmount(code: "EUR", amount: 2000),
+            CurrencyAmount(code: "USD", amount: -11),
+        ]
+    )
+    Check.accuracy(mixedLeft.left, 2189)
+    Check.accuracy(mixedLeft.spentToday, 11)
+
+    let uahLeft = DashboardSnapshot.compute(
+        balance: 127.268,
+        goods: [],
+        today: today,
+        displayCode: "UAH",
+        currencyCodeByID: [1: "EUR", 2: "UAH"],
+        fx: .stub,
+        balanceCode: "EUR",
+        balances: [
+            CurrencyAmount(code: "EUR", amount: 100),
+            CurrencyAmount(code: "UAH", amount: 1090.72),
+        ]
+    )
+    Check.accuracy(uahLeft.left, 5090.72)
+
+    let leftFromApiAmount = DashboardSnapshot.compute(
+        balance: 100,
+        goods: [],
+        today: today,
+        displayCode: "UAH",
+        fx: .stub,
+        balanceCode: "EUR"
+    )
+    Check.accuracy(leftFromApiAmount.left, 4000)
+
+    let gbp = Transaction(
+        id: 4,
+        description: "tea",
+        signedValue: -8,
+        currencyID: 3,
+        accountID: 1,
+        civilDate: today
+    )
+    let unquoted = DashboardSnapshot.compute(
+        balance: 0,
+        goods: [eurSpend, gbp],
+        today: today,
+        displayCode: "USD",
+        currencyCodeByID: [1: "EUR", 3: "GBP"],
+        fx: .stub
+    )
+    Check.accuracy(unquoted.spentToday, 11)
+    Check.accuracy(unquoted.spentMonth, 11)
+
+    let convertedRank = SpendRank.mostExpensive(
+        transactions: [
+            Transaction(
+                id: 5,
+                description: "usd coffee",
+                signedValue: MoneyDisplay.convert(-11, from: "USD", to: "EUR", using: .stub) ?? .nan,
+                currencyID: 2,
+                accountID: 1,
+                civilDate: today
+            ),
+            Transaction(
+                id: 6,
+                description: "eur snack",
+                signedValue: -8,
+                currencyID: 1,
+                accountID: 1,
+                civilDate: today
+            ),
+        ],
+        categories: []
+    )
+    Check.equal(convertedRank.map(\.title), ["usd coffee", "eur snack"])
+    Check.accuracy(convertedRank[0].signedValue, -10)
+
+    MoneyDisplay.useStubQuotes()
+    Check.accuracy(MoneyDisplay.convert(10, from: "EUR", to: "USD") ?? .nan, 11)
 }
 
 func repeatCategoryChecks() {
@@ -379,9 +614,10 @@ func spendRankChecks() {
         ],
         categories: [food, rent]
     )
-    Check.equal(byCategory.map(\.title), ["rent", "food"])
+    Check.equal(byCategory.map(\.title), ["rent", "food", "untagged"])
     Check.accuracy(byCategory[0].signedValue, -30)
     Check.accuracy(byCategory[1].signedValue, -14.5)
+    Check.accuracy(byCategory[2].signedValue, -8)
 
     let catalogButNoTags = SpendRank.mostExpensive(
         transactions: [tx(id: 1, value: -12, name: "coffee")],
@@ -451,6 +687,14 @@ func configChecks() {
     Check.equal(MousCurrencyPref.pref(for: "uah"), .uah)
     Check.equal(first.notifyInApp, true)
     Check.equal(first.notifyMacOS, true)
+    Check.equal(first.hideBalance, false)
+    Check.equal(first.hideBalanceStyle, "scramble")
+    Check.equal(HideBalanceStyle.parse("veil"), .veil)
+    Check.equal(HideBalanceStyle.parse("  VEIL  "), .veil)
+    Check.equal(HideBalanceStyle.parse("nope"), .scramble)
+    Check.equal(MousCurrencyPref.usd.glyph, "$")
+    Check.equal(MousCurrencyPref.eur.glyph, "€")
+    Check.equal(MousCurrencyPref.uah.glyph, "₴")
     Check.equal(first.dev, false)
     Check.equal(first.databasePath, dir.appendingPathComponent("data.db").path)
 
@@ -461,6 +705,8 @@ func configChecks() {
     cfg.dev = true
     cfg.notifyInApp = false
     cfg.notifyMacOS = false
+    cfg.hideBalance = true
+    cfg.hideBalanceStyle = "veil"
     MousConfigFile.save(cfg)
     let loaded = MousConfigFile.load()
     Check.equal(loaded.reportPeriod, "week")
@@ -469,6 +715,8 @@ func configChecks() {
     Check.equal(loaded.dev, true)
     Check.equal(loaded.notifyInApp, false)
     Check.equal(loaded.notifyMacOS, false)
+    Check.equal(loaded.hideBalance, true)
+    Check.equal(loaded.hideBalanceStyle, "veil")
 
     let partial = dir.appendingPathComponent("config.json")
     try? Data("{ \"host\": \"0.0.0.0\", \"port\": 9000 }\n".utf8).write(to: partial)
@@ -479,7 +727,51 @@ func configChecks() {
     Check.equal(filled.reportPeriod, "14 days")
     Check.equal(filled.notifyInApp, true)
     Check.equal(filled.notifyMacOS, true)
+    Check.equal(filled.hideBalance, false)
+    Check.equal(filled.hideBalanceStyle, "scramble")
     Check.equal(MousConfigFile.summaryReportURL(), dir.appendingPathComponent("summary_report.json"))
+
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+    let from = calendar.date(from: DateComponents(year: 2026, month: 9, day: 17))!
+    let nextTwoWeeks = ReportCadence.nextReportDate(period: "14 days", from: from, calendar: calendar)!
+    let twoParts = calendar.dateComponents([.year, .month, .day], from: nextTwoWeeks)
+    Check.equal(twoParts.year ?? 0, 2026)
+    Check.equal(twoParts.month ?? 0, 10)
+    Check.equal(twoParts.day ?? 0, 1)
+    let nextWeek = ReportCadence.nextReportDate(period: "week", from: from, calendar: calendar)!
+    let weekParts = calendar.dateComponents([.year, .month, .day], from: nextWeek)
+    Check.equal(weekParts.year ?? 0, 2026)
+    Check.equal(weekParts.month ?? 0, 9)
+    Check.equal(weekParts.day ?? 0, 24)
+    let nextMonth = ReportCadence.nextReportDate(period: "month", from: from, calendar: calendar)!
+    let monthParts = calendar.dateComponents([.year, .month, .day], from: nextMonth)
+    Check.equal(monthParts.month ?? 0, 10)
+    Check.equal(monthParts.day ?? 0, 17)
+    Check.true(ReportCadence.nextReportDate(period: "whenever", from: from, calendar: calendar) == nil, "invalid period has no next date")
+
+    try? Data("{ \"hide_balance_style\": \"nope\" }\n".utf8).write(to: partial)
+    let unknownStyle = MousConfigFile.load()
+    Check.equal(unknownStyle.hideBalanceStyle, "scramble")
+}
+
+func balanceMaskChecks() {
+    let samples = (0..<40).map { _ in BalanceMask.make() }
+    for sample in samples {
+        Check.true(BalanceMask.isMasked(sample), sample)
+        Check.equal(sample.count, 6, sample)
+    }
+    Check.true(Set(samples).count > 1, "masks should not all match")
+    Check.true(!BalanceMask.isMasked(""))
+    Check.true(!BalanceMask.isMasked("€12.00"))
+    Check.true(!BalanceMask.isMasked("Saved 59%."))
+    let veil = BalanceMask.veil(length: 4)
+    Check.equal(veil, "••••")
+    Check.true(BalanceMask.isVeil(veil), veil)
+    Check.true(!BalanceMask.isMasked(veil), veil)
+    Check.true(!BalanceMask.isVeil("?#*!??"))
+    Check.equal(BalanceMask.make(style: .veil, length: 4), "••••")
+    Check.true(BalanceMask.isMasked(BalanceMask.make(style: .scramble)))
 }
 
 func summaryReportChecks() {
@@ -558,8 +850,19 @@ func summaryReportChecks() {
     Check.accuracy(figures.income, 2000)
     Check.accuracy(figures.expense, 17.49)
     Check.accuracy(figures.saved, 1982.51)
+    Check.true(figures.formatSavedPercent().contains("99"), figures.formatSavedPercent())
     Check.equal(figures.top, ["food"])
     Check.accuracy(figures.runway ?? -1, 1586.91)
+    Check.equal(figures.formatRunway(1586.91), "1587 days")
+    Check.equal(figures.formatRunway(1), "1 day")
+    let usdFigures = figures.displayed(in: "USD", using: .stub)
+    Check.equal(usdFigures.currency, "USD")
+    Check.accuracy(usdFigures.income, 2200)
+    Check.accuracy(usdFigures.expense, 17.49 * 1.1)
+    Check.accuracy(usdFigures.saved, 1982.51 * 1.1)
+    Check.accuracy(usdFigures.nextMonth ?? -1, 12.4929 * 1.1)
+    let same = figures.displayed(in: "eur", using: .stub)
+    Check.accuracy(same.income, 2000)
     Check.accuracy(figures.nextMonth ?? -1, 12.4929)
 
     let missing = SummaryReportFigures.parse("not a summary\n")
@@ -578,6 +881,23 @@ func summaryReportChecks() {
     """)
     Check.true(noRunway?.runway == nil, "ellipsis runway is nil")
     Check.equal(noRunway?.top ?? ["x"], [])
+    Check.true(noRunway?.formatSavedPercent().contains("0") == true, noRunway?.formatSavedPercent() ?? "")
+    Check.true(noRunway?.formatSavedPercent().contains("%") == true, noRunway?.formatSavedPercent() ?? "")
+
+    let overspend = SummaryReportFigures.parse("""
+    summary
+      1 Sep 2026
+        currency = €
+        n = 2
+        in = 200 €
+        out = 300 €
+        saved = -100 €
+        top = []
+        runway = ...
+        next_month_spent_predictions = 0 €
+    """)
+    Check.true(overspend?.formatSavedPercent().contains("%") == true, overspend?.formatSavedPercent() ?? "")
+    Check.true(overspend?.formatSavedPercent().contains("50") == true, overspend?.formatSavedPercent() ?? "")
 
     var inbox: [ReportInboxItem] = []
     let firstReport = SummaryReportFile(capturedAt: Date(timeIntervalSince1970: 1_000), period: "14 days", stdout: sampleStdout)

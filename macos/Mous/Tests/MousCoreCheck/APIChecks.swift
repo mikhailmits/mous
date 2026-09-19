@@ -343,7 +343,7 @@ private func finiteJSONChecks(session: URLSession, date: CivilDate) async {
 
     StubURLProtocol.handler = { _ in
         let body = """
-        {"account_id":1,"amount":1e309}
+        {"account_id":1,"amount":1e309,"by_currency":[]}
         """
         return (200, Data(body.utf8))
     }
@@ -354,6 +354,21 @@ private func finiteJSONChecks(session: URLSession, date: CivilDate) async {
         Check.equal(error, .undecodable)
     } catch {
         Check.fail("infinite balance: unexpected \(error)")
+    }
+
+    StubURLProtocol.handler = { _ in
+        let body = """
+        {"account_id":1,"amount":0,"by_currency":[{"currency_id":1,"amount":1e309}]}
+        """
+        return (200, Data(body.utf8))
+    }
+    do {
+        _ = try await client.balance(accountID: 1)
+        Check.fail("infinite by_currency should be undecodable")
+    } catch let error as APIError {
+        Check.equal(error, .undecodable)
+    } catch {
+        Check.fail("infinite by_currency: unexpected \(error)")
     }
 }
 

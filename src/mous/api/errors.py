@@ -4,7 +4,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from oxyde.exceptions import IntegrityError, NotFoundError
 
-from mous.db.utils.errors import LastAccountError
+from mous.db.utils.errors import LastAccountError, LastDefaultError
 
 
 def _error(status: int, error: str, detail: str) -> JSONResponse:
@@ -19,6 +19,10 @@ def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(LastAccountError)
     async def last_account(_request: Request, exc: LastAccountError) -> JSONResponse:
         return _error(409, "last_account", str(exc))
+
+    @app.exception_handler(LastDefaultError)
+    async def last_default(_request: Request, exc: LastDefaultError) -> JSONResponse:
+        return _error(409, "last_default", str(exc))
 
     @app.exception_handler(IntegrityError)
     async def integrity(_request: Request, exc: IntegrityError) -> JSONResponse:

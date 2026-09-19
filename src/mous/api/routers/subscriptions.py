@@ -7,6 +7,7 @@ from mous.api.schemas import (
     SubscriptionOut,
     SubscriptionPatch,
     collection,
+    money_view,
     require_id,
     subscription_out,
 )
@@ -26,11 +27,18 @@ from mous.db.utils import (
 router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
 
 
-async def _subscription_out(item: RecurringGood) -> SubscriptionOut:
+async def _subscription_out(
+    item: RecurringGood,
+    *,
+    default: str | None = None,
+    codes: dict[int, str] | None = None,
+) -> SubscriptionOut:
     good = item.good
     if good is None:
         good = await get_good(require_id(item.good_id))
-    return subscription_out(item, good)
+    if default is None or codes is None:
+        default, codes = await money_view()
+    return subscription_out(item, good, default=default, codes=codes)
 
 
 @router.get("", operation_id="list_subscriptions")
@@ -43,7 +51,13 @@ async def list_subscriptions(
         account_goods = await get_goods(account_id=account_id)
         allowed = {good.id for good in account_goods}
         items = [item for item in items if item.good_id in allowed]
-    return collection([await _subscription_out(item) for item in items])
+    default, codes = await money_view()
+    return collection(
+        [
+            await _subscription_out(item, default=default, codes=codes)
+            for item in items
+        ]
+    )
 
 
 @router.post("", operation_id="create_subscription", status_code=201)

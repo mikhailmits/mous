@@ -21,12 +21,17 @@ struct DashboardCard: View {
     var statusMessage: String?
     /// ISO 4217 code for the Settings currency.
     var currencyCode: String
+    var hideBalance: Bool = false
     var onSpendHover: (Bool) -> Void = { _ in }
     var onSavedHover: (Bool) -> Void = { _ in }
     var showCommandHints: Bool = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.mousAccent) private var mousAccent
     @State private var spendHotspot: CGRect = .zero
+    @State private var spentTodayMask = BalanceMask.make()
+    @State private var leftMask = BalanceMask.make()
+    @State private var spentMonthMask = BalanceMask.make()
+    @State private var lastTick: TickToken?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -91,7 +96,26 @@ struct DashboardCard: View {
         .frame(maxWidth: .infinity, minHeight: 136, alignment: .topLeading)
         .mousCard()
         .redacted(reason: isRefreshing && !hasLoaded ? .placeholder : [])
-        .animation(Self.tickAnimation(reduceMotion: reduceMotion), value: tickToken)
+        .animation(tickAnimation, value: tickToken)
+        .onAppear {
+            if lastTick == nil { lastTick = tickToken }
+            if hideBalance { reshuffleMasks() }
+        }
+        .onChange(of: hideBalance) { _, on in
+            if on { reshuffleMasks() }
+        }
+        .onChange(of: displayedSpentToday) { _, _ in
+            if hideBalance { spentTodayMask = freshMask() }
+        }
+        .onChange(of: snapshot.left) { _, _ in
+            if hideBalance { leftMask = freshMask() }
+        }
+        .onChange(of: displayedSpentMonth) { _, _ in
+            if hideBalance { spentMonthMask = freshMask() }
+        }
+        .onChange(of: tickToken) { _, new in
+            lastTick = new
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)
         .accessibilityHint("Command M shows History. Command X shows Most expensive. Command F expands an open list.")
@@ -103,10 +127,11 @@ struct DashboardCard: View {
             spentToday: displayedSpentToday,
             spentMonth: displayedSpentMonth,
             left: hasLoaded ? snapshot.left : 0,
-            saved: hasLoaded ? (snapshot.savedRatio ?? 0) : 0,
+            saved: hasLoaded ? snapshot.savedRatio : nil,
             hasLoaded: hasLoaded,
             status: statusMessage ?? "",
-            currencyCode: currencyCode
+            currencyCode: currencyCode,
+            hideBalance: hideBalance
         )
     }
 
@@ -114,19 +139,39 @@ struct DashboardCard: View {
         var spentToday: Double
         var spentMonth: Double
         var left: Double
-        var saved: Double
+        var saved: Double?
         var hasLoaded: Bool
         var status: String
         var currencyCode: String
+        var hideBalance: Bool
     }
 
-    private static func tickAnimation(reduceMotion: Bool) -> Animation {
-        reduceMotion ? .easeOut(duration: 0.15) : .snappy(duration: 0.3)
+    private var tickAnimation: Animation {
+        if reduceMotion { return .easeOut(duration: 0.15) }
+        return .snappy(duration: Self.snappyDuration(from: lastTick, to: tickToken))
+    }
+
+    private static func snappyDuration(from old: TickToken?, to new: TickToken) -> Double {
+        guard let old else { return 0.28 }
+        let delta = max(
+            abs(new.spentToday - old.spentToday),
+            abs(new.left - old.left),
+            abs(new.spentMonth - old.spentMonth)
+        )
+        if delta < 0.005 { return 0.22 }
+        let scale = max(
+            abs(old.left), abs(new.left),
+            abs(old.spentMonth), abs(new.spentMonth),
+            abs(old.spentToday), abs(new.spentToday),
+            25
+        )
+        let mag = min(1, delta / scale)
+        return min(0.6, 0.22 + mag * 0.38)
     }
 
     @ViewBuilder
     private var heroValue: some View {
-        Text(displayedSpentToday, format: money)
+        Text(hideBalance ? spentTodayMask : displayedSpentToday.formatted(money))
             .font(.system(size: 34, weight: .semibold, design: .rounded))
             .monospacedDigit()
             .foregroundStyle(.primary)
@@ -145,7 +190,7 @@ struct DashboardCard: View {
     private var leftLabel: some View {
         // Bold rounded weight keeps the sampled mark color readable
         // against the material at the themed opacity.
-        Text("\(hasLoaded ? snapshot.left : 0, format: money) left")
+        Text(hideBalance ? "\(leftMask) left" : "\(hasLoaded ? snapshot.left : 0, format: money) left")
             .font(.system(size: 15, weight: .bold, design: .rounded))
             .foregroundStyle(mousAccent)
             .monospacedDigit()
@@ -161,7 +206,7 @@ struct DashboardCard: View {
     @ViewBuilder
     private var monthValue: some View {
         // Secondary tier: quieter than the hero, still legible as an amount.
-        Text(displayedSpentMonth, format: money)
+        Text(hideBalance ? spentMonthMask : displayedSpentMonth.formatted(money))
             .font(.callout.weight(.medium))
             .foregroundStyle(.secondary)
             .monospacedDigit()
@@ -169,9 +214,8 @@ struct DashboardCard: View {
     }
 
     private var savedLabel: some View {
-        let ratio = hasLoaded ? (snapshot.savedRatio ?? 0) : 0
-        return HStack(alignment: .firstTextBaseline, spacing: 5) {
-            Text("Saved \(ratio, format: Self.percent).")
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            Text(savedText)
                 .font(.system(size: 15, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(.primary)
@@ -183,23 +227,49 @@ struct DashboardCard: View {
         }
     }
 
+    private var savedText: String {
+        guard hasLoaded else { return "Saved 0%." }
+        guard let ratio = snapshot.savedRatio else { return "Saved 0%." }
+        return "Saved \(ratio.formatted(Self.percent))."
+    }
+
     private var accessibilityText: String {
         if !hasLoaded {
-            var text = "Spent today 0, 0 left, spent this month 0, saved 0 percent this month"
+            var text = "Spent today 0, 0 left, spent this month 0, saved 0% this month"
             if let statusMessage, !statusMessage.isEmpty {
                 text += ", \(statusMessage)"
             }
             return text
         }
-        let today = displayedSpentToday.formatted(money)
-        let left = snapshot.left.formatted(money)
-        let month = displayedSpentMonth.formatted(money)
-        let saved = (snapshot.savedRatio ?? 0).formatted(Self.percent)
+        let today = hideBalance ? spentTodayMask : displayedSpentToday.formatted(money)
+        let left = hideBalance ? leftMask : snapshot.left.formatted(money)
+        let month = hideBalance ? spentMonthMask : displayedSpentMonth.formatted(money)
+        let saved: String
+        if let ratio = snapshot.savedRatio {
+            saved = ratio.formatted(Self.percent)
+        } else {
+            saved = "0%"
+        }
         var text = "Spent today \(today), \(left) left, spent this month \(month), saved \(saved) this month"
         if let statusMessage, !statusMessage.isEmpty {
             text += ", \(statusMessage)"
         }
         return text
+    }
+
+    private func reshuffleMasks() {
+        let style = hideStyle
+        spentTodayMask = BalanceMask.make(style: style)
+        leftMask = BalanceMask.make(style: style)
+        spentMonthMask = BalanceMask.make(style: style)
+    }
+
+    private func freshMask() -> String {
+        BalanceMask.make(style: hideStyle)
+    }
+
+    private var hideStyle: HideBalanceStyle {
+        HideBalanceStyle.parse(MousConfigFile.load().hideBalanceStyle)
     }
 
     private var money: FloatingPointFormatStyle<Double>.Currency {

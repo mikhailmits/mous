@@ -7,6 +7,7 @@ from mous.api.schemas import (
     TransactionOut,
     TransactionPatch,
     collection,
+    money_view,
     require_id,
     transaction_out,
 )
@@ -46,7 +47,10 @@ async def list_transactions(
         top_value=top_value,
         btm_value=btm_value,
     )
-    return collection([transaction_out(good) for good in goods])
+    default, codes = await money_view()
+    return collection(
+        [transaction_out(good, default=default, codes=codes) for good in goods]
+    )
 
 
 @router.post("", operation_id="create_transaction", status_code=201)
@@ -65,12 +69,16 @@ async def create_transaction(body: TransactionCreate) -> TransactionOut:
         occurred_on=occurred_on,
         category_id=body.category_id,
     )
-    return transaction_out(await get_good(require_id(good.id)))
+    default, codes = await money_view()
+    return transaction_out(
+        await get_good(require_id(good.id)), default=default, codes=codes
+    )
 
 
 @router.get("/{transaction_id}", operation_id="get_transaction")
 async def get_transaction(transaction_id: int) -> TransactionOut:
-    return transaction_out(await get_good(transaction_id))
+    default, codes = await money_view()
+    return transaction_out(await get_good(transaction_id), default=default, codes=codes)
 
 
 @router.patch("/{transaction_id}", operation_id="update_transaction")
@@ -87,9 +95,10 @@ async def update_transaction(
         await update_good_occurred_on(
             transaction_id, unix_to_utc_date(body.occurred_unix_time)
         )
-    if body.category_id is not None:
+    if "category_id" in body.model_fields_set:
         await update_good_category(transaction_id, body.category_id)
-    return transaction_out(await get_good(transaction_id))
+    default, codes = await money_view()
+    return transaction_out(await get_good(transaction_id), default=default, codes=codes)
 
 
 @router.delete("/{transaction_id}", operation_id="delete_transaction", status_code=204)

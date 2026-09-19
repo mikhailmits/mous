@@ -5,6 +5,7 @@ from mous.api.schemas import (
     AccountOut,
     AccountPatch,
     BalanceOut,
+    BalancePart,
     Collection,
     SpentOut,
     account_out,
@@ -58,8 +59,16 @@ async def delete_account_endpoint(account_id: int) -> Response:
 @router.get("/{account_id}/balance", operation_id="get_balance")
 async def get_balance_endpoint(account_id: int) -> BalanceOut:
     account = await get_account(account_id)
-    amount = await account.get_balance()
-    return BalanceOut(account_id=account_id, amount=amount)
+    parts, _naive = await account.get_balance_parts()
+    amount, currency = await account.get_balance_in_default()
+    return BalanceOut(
+        account_id=account_id,
+        amount=amount,
+        currency=currency,
+        by_currency=[
+            BalancePart(currency_id=currency_id, amount=value) for currency_id, value in parts
+        ],
+    )
 
 
 @router.get("/{account_id}/spent", operation_id="get_spent")
@@ -74,10 +83,11 @@ async def get_spent_endpoint(
     end = unix_to_utc_date(to_unix_time) if to_unix_time is not None else today
     if start > end:
         start, end = end, start
-    amount = await account.get_spent_on(start, end)
+    amount, currency = await account.get_spent_in_default(start, end)
     return SpentOut(
         account_id=account_id,
         from_unix_time=utc_date_to_unix(start),
         to_unix_time=utc_date_to_unix(end),
         amount=amount,
+        currency=currency,
     )

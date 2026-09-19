@@ -32,14 +32,27 @@ final class ReportNoticeChrome {
     }
 
     func open(_ item: ReportInboxItem) {
-        selectedID = item.id
         markRead(item.id)
+        selectedID = item.id
     }
 
     func selectLatestUnread() {
         let target = items.first { !$0.read } ?? items.first
         guard let target else { return }
         open(target)
+    }
+
+    func selectFromAlert(capturedAt: TimeInterval?) {
+        if let capturedAt {
+            let target = items.first {
+                abs($0.capturedAt.timeIntervalSince1970 - capturedAt) < 0.05
+            }
+            if let target {
+                open(target)
+                return
+            }
+        }
+        selectLatestUnread()
     }
 
     @discardableResult
@@ -89,7 +102,10 @@ struct NotificationsCard: View {
         VStack(alignment: .leading, spacing: 20) {
             header(title: "Notifications", back: nil)
             if notice.items.isEmpty {
-                empty
+                VStack(alignment: .leading, spacing: 8) {
+                    empty
+                    previewRow
+                }
             } else {
                 ScrollView(.vertical) {
                     rows
@@ -115,8 +131,13 @@ struct NotificationsCard: View {
         }
     }
 
+    private func displayedFigures(for item: ReportInboxItem) -> SummaryReportFigures? {
+        let display = MousCurrencyPref.isoCode(for: MousConfigFile.load().currency)
+        return SummaryReportFigures.parse(item.stdout)?.displayed(in: display)
+    }
+
     private func detail(_ item: ReportInboxItem) -> some View {
-        let figures = SummaryReportFigures.parse(item.stdout)
+        let figures = displayedFigures(for: item)
         return VStack(alignment: .leading, spacing: 20) {
             header(title: SummaryReportCopy.inboxTitle(period: item.period), back: { notice.popSelection() })
             VStack(alignment: .leading, spacing: 4) {
@@ -131,14 +152,18 @@ struct NotificationsCard: View {
                 HStack(alignment: .top, spacing: 8) {
                     stat("Out", figures.formatMoney(figures.expense), emphasize: .primary)
                     stat("In", figures.formatMoney(figures.income), emphasize: .positive)
-                    stat("Saved", figures.formatMoney(figures.saved), emphasize: .positive)
+                    stat(
+                        "Saved",
+                        figures.formatSavedPercent(),
+                        emphasize: figures.savedRatio >= 0 ? .positive : .primary
+                    )
                 }
                 Text(detailCaption(figures))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
                 if let runway = figures.runway {
-                    quietLine("Runway \(figures.formatMoney(runway))")
+                    quietLine("Runway \(figures.formatRunway(runway))")
                 }
                 if let next = figures.nextMonth {
                     quietLine("Next month \(figures.formatMoney(next))")
@@ -158,7 +183,7 @@ struct NotificationsCard: View {
             Text("No reports yet.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
-            Text("They land here when a period closes.")
+            Text(emptyCaption)
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -169,15 +194,49 @@ struct NotificationsCard: View {
         .background(trackFill)
     }
 
+    private var previewRow: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Color.clear
+                .frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(SummaryReportCopy.inboxTitle(period: configuredPeriod))
+                    .font(.callout.weight(.regular))
+                    .foregroundStyle(.primary)
+                Text("Out \(ghostMoney(1240))  ·  Saved 25%")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            Text("Preview")
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .fixedSize()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(trackFill)
+        .opacity(0.5)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
     private func row(_ item: ReportInboxItem) -> some View {
-        let figures = SummaryReportFigures.parse(item.stdout)
+        let figures = displayedFigures(for: item)
         return Button {
             notice.open(item)
         } label: {
             HStack(alignment: .center, spacing: 10) {
                 Circle()
-                    .fill(item.read ? Color.clear : Color.primary)
-                    .frame(width: 7, height: 7)
+                    .fill(Color.primary)
+                    .frame(width: item.read ? 0 : 8, height: 8)
+                    .opacity(item.read ? 0 : 1)
+                    .animation(
+                        reduceMotion ? .easeOut(duration: 0.12) : .easeOut(duration: 0.18),
+                        value: item.read
+                    )
                 VStack(alignment: .leading, spacing: 2) {
                     Text(SummaryReportCopy.inboxTitle(period: item.period))
                         .font(.callout.weight(item.read ? .regular : .semibold))
@@ -258,7 +317,7 @@ struct NotificationsCard: View {
     }
 
     private func rowCaption(_ figures: SummaryReportFigures) -> String {
-        "Out \(figures.formatMoney(figures.expense))  ·  Saved \(figures.formatMoney(figures.saved))"
+        "Out \(figures.formatMoney(figures.expense))  ·  Saved \(figures.formatSavedPercent())"
     }
 
     private func detailCaption(_ figures: SummaryReportFigures) -> String {
@@ -279,6 +338,35 @@ struct NotificationsCard: View {
         return date.formatted(.dateTime.day().month(.abbreviated))
     }
 
+    private var configuredPeriod: String {
+        MousConfigFile.ensure().reportPeriod
+    }
+
+    private var emptyCaption: String {
+        let period = configuredPeriod.split { $0.isWhitespace }.joined(separator: " ")
+        switch ReportCadence.classify(period) {
+        case .week:
+            return "Your first week report lands when the week closes."
+        case .twoWeeks:
+            return "Your first 2 week report lands when the period closes."
+        case .month:
+            return "Your first month report lands when the month closes."
+        case .custom:
+            guard ReportCadence.isValidPeriod(period) else {
+                return "They land here when a period closes."
+            }
+            return "Your first \(period) report lands when the period closes."
+        }
+    }
+
+    private func ghostMoney(_ value: Double) -> String {
+        let code = MousCurrencyPref.isoCode(for: MousConfigFile.load().currency)
+        return value.formatted(
+            FloatingPointFormatStyle<Double>.Currency(code: code)
+                .precision(.fractionLength(2))
+        )
+    }
+
     private func rowAccessibility(_ item: ReportInboxItem, figures: SummaryReportFigures?) -> String {
         var parts = [SummaryReportCopy.inboxTitle(period: item.period)]
         if !item.read { parts.append("unread") }
@@ -293,7 +381,7 @@ struct NotificationsCard: View {
             if !figures.range.isEmpty { parts.append(figures.range) }
             parts.append("out \(figures.formatMoney(figures.expense))")
             parts.append("in \(figures.formatMoney(figures.income))")
-            parts.append("saved \(figures.formatMoney(figures.saved))")
+            parts.append("saved \(figures.formatSavedPercent())")
             parts.append(detailCaption(figures))
         }
         return parts.joined(separator: ", ")

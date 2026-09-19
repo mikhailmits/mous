@@ -1,3 +1,14 @@
+/// Unconverted signed net for one ISO currency, as stored by the API.
+public struct CurrencyAmount: Equatable, Sendable {
+    public var code: String
+    public var amount: Double
+
+    public init(code: String, amount: Double) {
+        self.code = code
+        self.amount = amount
+    }
+}
+
 public struct DashboardSnapshot: Equatable, Sendable {
     public var spentToday: Double
     public var spentMonth: Double
@@ -29,21 +40,26 @@ public struct DashboardSnapshot: Equatable, Sendable {
         today: CivilDate,
         displayCode: String = "EUR",
         currencyCodeByID: [Int: String] = [:],
-        fx: FXBook = .identity
+        fx: FXBook = .identity,
+        balanceCode: String? = nil,
+        balances: [CurrencyAmount] = []
     ) -> DashboardSnapshot {
         var spentToday = 0.0
         var spentMonth = 0.0
         var incomeMonth = 0.0
         for good in goods {
             guard good.signedValue.isFinite else { continue }
-            let source = currencyCodeByID[good.currencyID] ?? displayCode
-            let signed = MoneyDisplay.convert(
+            guard let source = sourceCode(
+                currencyID: good.currencyID,
+                map: currencyCodeByID,
+                displayCode: displayCode
+            ) else { continue }
+            guard let signed = MoneyDisplay.convert(
                 good.signedValue,
                 from: source,
                 to: displayCode,
                 using: fx
-            )
-            guard signed.isFinite else { continue }
+            ) else { continue }
             if signed < 0 {
                 let magnitude = -signed
                 spentMonth += magnitude
@@ -64,8 +80,54 @@ public struct DashboardSnapshot: Equatable, Sendable {
         return DashboardSnapshot(
             spentToday: spentToday,
             spentMonth: spentMonth,
-            left: balance.isFinite ? balance : 0,
+            left: convertedLeft(
+                balance: balance,
+                displayCode: displayCode,
+                fx: fx,
+                balanceCode: balanceCode,
+                balances: balances
+            ),
             savedRatio: saved
         )
+    }
+
+    private static func sourceCode(
+        currencyID: Int,
+        map: [Int: String],
+        displayCode: String
+    ) -> String? {
+        if let mapped = map[currencyID] { return mapped }
+        if map.isEmpty { return displayCode }
+        return nil
+    }
+
+    private static func convertedLeft(
+        balance: Double,
+        displayCode: String,
+        fx: FXBook,
+        balanceCode: String?,
+        balances: [CurrencyAmount]
+    ) -> Double {
+        if !balances.isEmpty {
+            var left = 0.0
+            for part in balances {
+                guard let converted = MoneyDisplay.convert(
+                    part.amount,
+                    from: part.code,
+                    to: displayCode,
+                    using: fx
+                ) else { continue }
+                left += converted
+            }
+            return left.isFinite ? left : 0
+        }
+        let unit = balanceCode ?? displayCode
+        let converted = MoneyDisplay.convert(
+            balance,
+            from: unit,
+            to: displayCode,
+            using: fx
+        )
+        return converted ?? 0
     }
 }

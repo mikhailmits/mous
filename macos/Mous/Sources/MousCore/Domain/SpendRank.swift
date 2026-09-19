@@ -1,5 +1,5 @@
-/// One row in the Most expensive tip: a category total, or a good when
-/// nothing this month is categorized. Ordered most expensive first.
+/// One row in the Most expensive tip: a category total, or an untagged
+/// good. Ordered most expensive first.
 public struct SpendRankRow: Equatable, Sendable, Identifiable {
     public var id: String
     public var title: String
@@ -15,10 +15,9 @@ public struct SpendRankRow: Equatable, Sendable, Identifiable {
 }
 
 public enum SpendRank {
-    /// Categories with spend this month, most expensive first. If no
-    /// expense has a known `categoryID`, fall back to individual goods
-    /// in the same order. Dates ride along so the tip can label Today /
-    /// Yesterday without changing rank.
+    /// Categories with spend this month plus untagged goods, most expensive
+    /// first. Tagged rows roll up; untagged stay individual so a large rent
+    /// line is not hidden by a small coffee category.
     public static func mostExpensive(
         transactions: [Transaction],
         categories: [Category]
@@ -26,27 +25,27 @@ public enum SpendRank {
         let expenses = transactions.filter(\.isExpense)
         let names = Dictionary(uniqueKeysWithValues: categories.map { ($0.id, $0.name) })
         var totals: [Int: (sum: Double, latest: CivilDate)] = [:]
+        var untagged: [Transaction] = []
         for tx in expenses {
-            guard let id = tx.categoryID, names[id] != nil else { continue }
-            if let existing = totals[id] {
-                totals[id] = (existing.sum + tx.signedValue, max(existing.latest, tx.civilDate))
+            if let id = tx.categoryID, names[id] != nil {
+                if let existing = totals[id] {
+                    totals[id] = (existing.sum + tx.signedValue, max(existing.latest, tx.civilDate))
+                } else {
+                    totals[id] = (tx.signedValue, tx.civilDate)
+                }
             } else {
-                totals[id] = (tx.signedValue, tx.civilDate)
+                untagged.append(tx)
             }
         }
-        if !totals.isEmpty {
-            return totals
-                .map { id, value in
-                    SpendRankRow(
-                        id: "c-\(id)",
-                        title: names[id] ?? "",
-                        signedValue: value.sum,
-                        civilDate: value.latest
-                    )
-                }
-                .sorted(by: Self.rankOrder)
+        let categoryRows = totals.map { id, value in
+            SpendRankRow(
+                id: "c-\(id)",
+                title: names[id] ?? "",
+                signedValue: value.sum,
+                civilDate: value.latest
+            )
         }
-        return expenses
+        let goodRows = untagged
             .sorted {
                 if $0.signedValue != $1.signedValue { return $0.signedValue < $1.signedValue }
                 return $0.id > $1.id
@@ -59,6 +58,7 @@ public enum SpendRank {
                     civilDate: $0.civilDate
                 )
             }
+        return (categoryRows + goodRows).sorted(by: Self.rankOrder)
     }
 
     private static func rankOrder(_ a: SpendRankRow, _ b: SpendRankRow) -> Bool {

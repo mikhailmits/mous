@@ -5,6 +5,7 @@ import MousCore
 struct MousCoreCheck {
     static func main() async {
         parserChecks()
+        fxCalcChecks()
         dashboardChecks()
         moneyDisplayChecks()
         repeatCategoryChecks()
@@ -13,6 +14,7 @@ struct MousCoreCheck {
         civilDateChecks()
         spendRankChecks()
         configChecks()
+        balanceMaskChecks()
         summaryReportChecks()
         updateVersionChecks()
         await storeChecks()

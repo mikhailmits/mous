@@ -10,6 +10,9 @@ struct SettingsCard: View {
     @State private var customPeriod: String
     @State private var showAdvanced = false
     @State private var customInvalid = false
+    @State private var scramblePreview = BalanceMask.make()
+    @State private var showNotifyGhost = false
+    @State private var didShowNotifyGhost = false
 
     init(onClose: @escaping () -> Void) {
         self.onClose = onClose
@@ -34,9 +37,25 @@ struct SettingsCard: View {
                 SettingsChoiceBar(
                     items: Array(MousCurrencyPref.allCases),
                     title: \.label,
+                    mark: \.glyph,
                     selection: currencyBinding,
                     reduceMotion: reduceMotion
                 )
+            }
+            field("Balance.") {
+                VStack(alignment: .leading, spacing: 8) {
+                    toggleRow("Hide balance", isOn: $config.hideBalance)
+                    hideBalancePreview
+                    if config.hideBalance {
+                        SettingsChoiceBar(
+                            items: Array(HideBalanceStyle.allCases),
+                            title: \.label,
+                            selection: hideStyleBinding,
+                            reduceMotion: reduceMotion
+                        )
+                        .transition(.opacity)
+                    }
+                }
             }
             field("Show reports every.") {
                 SettingsChoiceBar(
@@ -45,9 +64,28 @@ struct SettingsCard: View {
                     selection: $cadence,
                     reduceMotion: reduceMotion
                 )
+                if let caption = nextReportCaption {
+                    Text(caption)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .monospacedDigit()
+                        .accessibilityLabel(caption)
+                }
                 if cadence == .custom {
                     customPeriodField
                         .transition(.opacity)
+                }
+            }
+            field("Notifications.") {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 6) {
+                        toggleRow("In-app inbox", isOn: $config.notifyInApp)
+                        toggleRow("Mac banners", isOn: $config.notifyMacOS)
+                    }
+                    if showNotifyGhost {
+                        notifyGhost
+                            .transition(.opacity)
+                    }
                 }
             }
             field("Updates.") {
@@ -67,8 +105,22 @@ struct SettingsCard: View {
         .onChange(of: cadence) { _, new in
             selectCadence(new)
         }
+        .onChange(of: config.notifyInApp) { wasOn, isOn in
+            previewNotifyIfNeeded(wasOn: wasOn, isOn: isOn)
+        }
+        .onChange(of: config.notifyMacOS) { wasOn, isOn in
+            previewNotifyIfNeeded(wasOn: wasOn, isOn: isOn)
+        }
+        .onChange(of: config.hideBalance) { _, on in
+            if on { scramblePreview = BalanceMask.make() }
+        }
+        .onChange(of: config.hideBalanceStyle) { _, _ in
+            scramblePreview = BalanceMask.make()
+        }
         .animation(reduceMotion ? .easeOut(duration: 0.12) : .snappy(duration: 0.22), value: cadence)
         .animation(reduceMotion ? .easeOut(duration: 0.12) : .snappy(duration: 0.22), value: showAdvanced)
+        .animation(reduceMotion ? .easeOut(duration: 0.12) : .snappy(duration: 0.22), value: config.hideBalance)
+        .animation(reduceMotion ? .easeOut(duration: 0.1) : .easeOut(duration: 0.18), value: showNotifyGhost)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Settings")
         .accessibilityHint("Escape or Done returns to the dashboard.")
@@ -101,6 +153,30 @@ struct SettingsCard: View {
         )
     }
 
+    private var hideStyleBinding: Binding<HideBalanceStyle> {
+        Binding(
+            get: { HideBalanceStyle.parse(config.hideBalanceStyle) },
+            set: { config.hideBalanceStyle = $0.rawValue }
+        )
+    }
+
+    private var hideStyle: HideBalanceStyle {
+        HideBalanceStyle.parse(config.hideBalanceStyle)
+    }
+
+    private var hideBalancePreview: some View {
+        let masked: String = {
+            if config.hideBalance, hideStyle == .scramble {
+                return scramblePreview
+            }
+            return BalanceMask.veil(length: 4)
+        }()
+        return Text("\(Self.fakeBalance) → \(masked)")
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(config.hideBalance ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary))
+            .accessibilityLabel(config.hideBalance ? "Balance hidden, preview" : "Preview: 12,480 dollars becomes hidden")
+    }
+
     @ViewBuilder
     private var customPeriodField: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -122,6 +198,20 @@ struct SettingsCard: View {
         }
     }
 
+    private var nextReportCaption: String? {
+        if cadence == .custom {
+            let trimmed = customPeriod.split { $0.isWhitespace }.joined(separator: " ")
+            if trimmed.isEmpty { return nil }
+            if customInvalid || !ReportCadence.isValidPeriod(trimmed) {
+                return "Fix the period"
+            }
+        }
+        guard let date = ReportCadence.nextReportDate(period: config.reportPeriod) else {
+            return nil
+        }
+        return "Next: \(formatNext(date))"
+    }
+
     private var advancedSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Button {
@@ -141,6 +231,7 @@ struct SettingsCard: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Advanced")
+            .accessibilityIdentifier("Advanced")
             .accessibilityValue(showAdvanced ? "Expanded" : "Collapsed")
             .accessibilityHint("Shows host, port, database, and developer mode.")
 
@@ -178,18 +269,7 @@ struct SettingsCard: View {
                             .background(trackFill)
                             .autocorrectionDisabled()
                     }
-                    HStack {
-                        Text("Developer mode")
-                            .font(.callout)
-                        Spacer(minLength: 8)
-                        Toggle("Developer mode", isOn: $config.dev)
-                            .labelsHidden()
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(trackFill)
+                    toggleRow("Developer mode", isOn: $config.dev)
                     Text("Host, port, and database apply the next time mous starts.")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
@@ -200,9 +280,59 @@ struct SettingsCard: View {
         }
     }
 
+    private var notifyGhost: some View {
+        HStack(spacing: 6) {
+            Text("Mous")
+                .fontWeight(.semibold)
+            Text("•")
+            Text("Report ready")
+        }
+        .font(.system(size: 12, weight: .medium, design: .rounded))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(.background.opacity(0.94))
+                .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
     private var trackFill: some View {
         RoundedRectangle(cornerRadius: 10, style: .continuous)
             .fill(Color.primary.opacity(0.055))
+    }
+
+    private func toggleRow(_ title: String, isOn: Binding<Bool>) -> some View {
+        Button {
+            isOn.wrappedValue.toggle()
+        } label: {
+            HStack {
+                Text(title)
+                    .font(.callout)
+                    .accessibilityHidden(true)
+                Spacer(minLength: 8)
+                Toggle(title, isOn: isOn)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(trackFill)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityIdentifier(title)
+        .accessibilityAddTraits(.isToggle)
+        .accessibilityValue(isOn.wrappedValue ? "On" : "Off")
+        .help(title == "Hide balance"
+            ? "Hides spent, left, history, and most-expensive amounts."
+            : title)
     }
 
     private func field<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -238,37 +368,78 @@ struct SettingsCard: View {
             customInvalid = true
         }
     }
+
+    private func previewNotifyIfNeeded(wasOn: Bool, isOn: Bool) {
+        guard isOn, !wasOn, !didShowNotifyGhost else { return }
+        didShowNotifyGhost = true
+        showNotifyGhost = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(1200))
+            showNotifyGhost = false
+        }
+    }
+
+    private func formatNext(_ date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.component(.year, from: date) != calendar.component(.year, from: Date()) {
+            return date.formatted(.dateTime.month(.abbreviated).day().year())
+        }
+        return date.formatted(.dateTime.month(.abbreviated).day())
+    }
+
+    private static let fakeBalance = "$12,480.00"
 }
 
 private struct SettingsChoiceBar<Item: Hashable & Identifiable>: View {
     var items: [Item]
     var title: KeyPath<Item, String>
+    var mark: KeyPath<Item, String>? = nil
     @Binding var selection: Item
     var reduceMotion: Bool
+    @Namespace private var pill
 
     var body: some View {
         HStack(spacing: 2) {
             ForEach(items) { item in
                 let selected = item == selection
+                let label = item[keyPath: title]
+                let glyph = mark.map { item[keyPath: $0] }
                 Button {
                     selection = item
                 } label: {
-                    Text(item[keyPath: title])
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundStyle(selected ? Color.primary : Color.secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 7)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .background {
-                    if selected {
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color.primary.opacity(0.12))
+                    VStack(spacing: 1) {
+                        Text(label)
+                        if let glyph, !glyph.isEmpty {
+                            Text(glyph)
+                                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                                .opacity(selected ? 0.9 : 0.45)
+                                .accessibilityHidden(true)
+                        }
+                    }
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(selected ? Color.primary : Color.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, glyph == nil ? 7 : 5)
+                    .contentShape(Rectangle())
+                    .background {
+                        if selected {
+                            if reduceMotion {
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(Color.primary.opacity(0.12))
+                            } else {
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(Color.primary.opacity(0.12))
+                                    .matchedGeometryEffect(id: "pill", in: pill)
+                            }
+                        }
                     }
                 }
+                .buttonStyle(SettingsChoiceChipStyle())
+                .accessibilityLabel(label)
+                .accessibilityIdentifier(label)
+                .help(label)
                 .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }
@@ -277,6 +448,13 @@ private struct SettingsChoiceBar<Item: Hashable & Identifiable>: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(Color.primary.opacity(0.055))
         }
-        .animation(reduceMotion ? .easeOut(duration: 0.12) : .snappy(duration: 0.22), value: selection)
+        .animation(reduceMotion ? .easeOut(duration: 0.1) : .snappy(duration: 0.22), value: selection)
+    }
+}
+
+private struct SettingsChoiceChipStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.7 : 1)
     }
 }

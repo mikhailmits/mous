@@ -11,7 +11,7 @@ final class SummaryReportMonitor: NSObject, UNUserNotificationCenterDelegate {
     private static let notificationID = "dev.mous.report.ready"
 
     private let notice: ReportNoticeChrome
-    private let onReveal: () -> Void
+    private let onReveal: (TimeInterval?) -> Void
     private let defaults: UserDefaults
     private var gate: SummaryReportGate
     private var source: DispatchSourceFileSystemObject?
@@ -20,7 +20,7 @@ final class SummaryReportMonitor: NSObject, UNUserNotificationCenterDelegate {
     init(
         notice: ReportNoticeChrome,
         defaults: UserDefaults = .standard,
-        onReveal: @escaping () -> Void
+        onReveal: @escaping (TimeInterval?) -> Void
     ) {
         self.notice = notice
         self.defaults = defaults
@@ -32,7 +32,9 @@ final class SummaryReportMonitor: NSObject, UNUserNotificationCenterDelegate {
 
     func start() {
         MousConfigFile.ensure()
-        UNUserNotificationCenter.current().delegate = self
+        if !MousHarness.isHeadless {
+            UNUserNotificationCenter.current().delegate = self
+        }
         applyCurrentFile()
         watchDirectory()
     }
@@ -56,7 +58,8 @@ final class SummaryReportMonitor: NSObject, UNUserNotificationCenterDelegate {
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         Task { @MainActor in
-            self.onReveal()
+            let captured = response.notification.request.content.userInfo["captured_at"] as? Double
+            self.onReveal(captured)
         }
         completionHandler()
     }
@@ -66,32 +69,35 @@ final class SummaryReportMonitor: NSObject, UNUserNotificationCenterDelegate {
     }
 
     private func apply(_ file: SummaryReportFile?) {
+        if isDemoMode { return }
         let decision = gate.consider(file)
         persistLastSeen()
-        if isDemoMode { return }
+        let cfg = MousConfigFile.load()
         switch decision {
         case .ignore:
-            if let file { notice.seedIfEmpty(file) }
+            if cfg.notifyInApp, let file { notice.seedIfEmpty(file) }
         case .remember:
-            if let file { notice.ingest(file, unread: false) }
+            if cfg.notifyInApp, let file { notice.ingest(file, unread: false) }
         case .notify(let report):
-            notice.ingest(report, unread: true)
-            postMacOS(
-                message: SummaryReportCopy.readyMessage(period: report.period),
-                report: report
-            )
+            notice.ingest(report, unread: cfg.notifyInApp)
+            if cfg.notifyMacOS {
+                postMacOS(
+                    message: SummaryReportCopy.readyMessage(period: report.period),
+                    report: report
+                )
+            }
         }
     }
 
     private func persistLastSeen() {
+        if MousHarness.isHeadless { return }
         if let lastSeen = gate.lastSeen {
             defaults.set(lastSeen, forKey: Self.lastSeenKey)
         }
     }
 
     private var isDemoMode: Bool {
-        let env = ProcessInfo.processInfo.environment
-        return env["MOUS_DEMO_TIP"] != nil || env["MOUS_DEMO_TYPE"] != nil
+        MousHarness.keepsPanelVisible
     }
 
     private func postMacOS(message: String, report: SummaryReportFile) {

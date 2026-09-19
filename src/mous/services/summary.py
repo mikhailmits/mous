@@ -11,6 +11,7 @@ from typing import Any
 
 from mous.api.time import unix_to_utc_date, utc_date_to_unix
 from mous.config.utils import report_period
+from mous.fx import convert as fx_convert
 from mous.services.api import get_json, items
 
 _DEFAULT_PERIOD = "14 days"
@@ -60,7 +61,7 @@ class Summary:
     n: int
     """How many transactions landed in this period."""
     currency: str
-    """Default currency symbol; amounts are not converted."""
+    """Default currency symbol; amounts are converted into it (EUR/USD/UAH stub)."""
     income: float
     expense: float
     saved: float
@@ -166,20 +167,22 @@ def build_summary(
         last,
     )
     categories = _category_names()
-    subs = keep_up_subscriptions()
+    default, codes = _fx_view()
+    view = (default, codes)
+    subs = keep_up_subscriptions(view)
     sub_names = {item.name for item in subs}
-    goods = keep_up_goods(txs, exclude_names=sub_names)
-    spent = period_expense(txs)
+    goods = keep_up_goods(txs, exclude_names=sub_names, view=view)
+    spent = period_expense(txs, view)
     return Summary(
         period=period_label(first, last),
         n=transaction_count(txs),
-        currency=_currency_symbol(),
-        income=period_in(txs),
+        currency=default,
+        income=period_in(txs, view),
         expense=spent,
-        saved=period_saved(txs),
-        top=top_spend(txs, categories),
+        saved=period_saved(txs, view),
+        top=top_spend(txs, categories, view),
         runway=runway(_balance(), spent, span),
-        next_month_spent_predictions=next_month_spent_prediction(history, last, span),
+        next_month_spent_predictions=next_month_spent_prediction(history, last, span, view=view),
         keep_up_subscriptions=subs,
         keep_up_goods=goods,
     )
@@ -201,30 +204,40 @@ def transaction_count(transactions: list[dict[str, Any]]) -> int:
     return len(transactions)
 
 
-def period_in(transactions: list[dict[str, Any]]) -> float:
-    """Income over the period."""
-    return sum(value for value in (_value(row) for row in transactions) if value > 0)
+def period_in(
+    transactions: list[dict[str, Any]],
+    view: tuple[str, dict[int, str]] | None = None,
+) -> float:
+    """Income over the period, in the default currency."""
+    return sum(value for value in (_value(row, view) for row in transactions) if value > 0)
 
 
-def period_expense(transactions: list[dict[str, Any]]) -> float:
-    """Expense magnitude over the period."""
-    return sum(-value for value in (_value(row) for row in transactions) if value < 0)
+def period_expense(
+    transactions: list[dict[str, Any]],
+    view: tuple[str, dict[int, str]] | None = None,
+) -> float:
+    """Expense magnitude over the period, in the default currency."""
+    return sum(-value for value in (_value(row, view) for row in transactions) if value < 0)
 
 
-def period_saved(transactions: list[dict[str, Any]]) -> float:
-    """Income minus expenses over the period."""
-    return period_in(transactions) - period_expense(transactions)
+def period_saved(
+    transactions: list[dict[str, Any]],
+    view: tuple[str, dict[int, str]] | None = None,
+) -> float:
+    """Income minus expenses over the period, in the default currency."""
+    return period_in(transactions, view) - period_expense(transactions, view)
 
 
 def top_spend(
     transactions: list[dict[str, Any]],
     categories: dict[int, str] | None = None,
+    view: tuple[str, dict[int, str]] | None = None,
 ) -> list[str]:
     """Highest-spend category names (or good names if nothing is tagged)."""
     names = categories or {}
     by_category: dict[int, float] = defaultdict(float)
     for row in transactions:
-        value = _value(row)
+        value = _value(row, view)
         if value >= 0:
             continue
         category_id = row.get("category_id")
@@ -235,7 +248,7 @@ def top_spend(
         return [names[cid] for cid in ranked]
     by_name: dict[str, float] = defaultdict(float)
     for row in transactions:
-        value = _value(row)
+        value = _value(row, view)
         if value >= 0:
             continue
         by_name[str(row.get("name") or "")] += -value
@@ -258,6 +271,7 @@ def next_month_spent_prediction(
     end: date,
     span_days: int,
     periods: int = _FORECAST_PERIODS,
+    view: tuple[str, dict[int, str]] | None = None,
 ) -> float:
     """Predict next month's spend from several prior periods of `span_days`."""
     if span_days <= 0 or periods <= 0:
@@ -272,7 +286,7 @@ def next_month_spent_prediction(
             for row in transactions
             if start <= _occurred_on(row) <= cursor
         ]
-        spent += period_expense(chunk)
+        spent += period_expense(chunk, view)
         days += span_days
         cursor = start - timedelta(days=1)
     if days <= 0:
@@ -280,7 +294,9 @@ def next_month_spent_prediction(
     return spent / days * _MONTH_DAYS
 
 
-def keep_up_subscriptions() -> list[SubscriptionCharge]:
+def keep_up_subscriptions(
+    view: tuple[str, dict[int, str]] | None = None,
+) -> list[SubscriptionCharge]:
     """Subscriptions that will still charge if you keep this up (each row is one value)."""
     rows = items(get_json("/subscriptions"))
     charges: list[SubscriptionCharge] = []
@@ -289,7 +305,10 @@ def keep_up_subscriptions() -> list[SubscriptionCharge]:
         raw = row.get("value")
         if not name or not isinstance(raw, (int, float)) or isinstance(raw, bool):
             continue
-        charges.append(SubscriptionCharge(name=name, value=float(raw)))
+        converted = _try_convert(float(raw), row.get("currency_id"), view)
+        if converted is None:
+            continue
+        charges.append(SubscriptionCharge(name=name, value=converted))
     charges.sort(key=lambda item: (item.value, item.name))
     return charges
 
@@ -302,12 +321,13 @@ def subscription_spend_total(charges: list[SubscriptionCharge]) -> float:
 def keep_up_goods(
     transactions: list[dict[str, Any]],
     exclude_names: set[str] | None = None,
+    view: tuple[str, dict[int, str]] | None = None,
 ) -> list[GoodSpend]:
     """Goods you will keep buying, with spend accumulated over the period."""
     skip = exclude_names or set()
     totals: dict[str, float] = defaultdict(float)
     for row in transactions:
-        value = _value(row)
+        value = _value(row, view)
         if value >= 0:
             continue
         name = str(row.get("name") or "").strip()
@@ -341,17 +361,18 @@ def _category_names() -> dict[int, str]:
     return names
 
 
-def _currency_symbol() -> str:
+def _fx_view() -> tuple[str, dict[int, str]]:
     rows = items(get_json("/currencies"))
+    codes: dict[int, str] = {}
+    default = "eur"
     for row in rows:
+        cid = row.get("id")
         symbol = row.get("symbol")
-        if row.get("is_default") is True and isinstance(symbol, str) and symbol:
-            return symbol
-    if rows:
-        symbol = rows[0].get("symbol")
-        if isinstance(symbol, str) and symbol:
-            return symbol
-    return "eur"
+        if isinstance(cid, int) and isinstance(symbol, str) and symbol:
+            codes[cid] = symbol
+            if row.get("is_default") is True:
+                default = symbol
+    return default, codes
 
 
 def _balance() -> float:
@@ -371,11 +392,40 @@ def _balance() -> float:
     return 0.0
 
 
-def _value(row: dict[str, Any]) -> float:
+def _value(
+    row: dict[str, Any],
+    view: tuple[str, dict[int, str]] | None = None,
+) -> float:
     raw = row.get("value")
     if isinstance(raw, bool) or not isinstance(raw, (int, float)):
         return 0.0
-    return float(raw)
+    converted = _try_convert(float(raw), row.get("currency_id"), view)
+    return converted if converted is not None else 0.0
+
+
+def _try_convert(
+    amount: float,
+    currency_id: object,
+    view: tuple[str, dict[int, str]] | None,
+) -> float | None:
+    if view is None:
+        return amount
+    default, codes = view
+    if not isinstance(currency_id, int):
+        return None
+    src = codes.get(currency_id)
+    if src is None:
+        return None
+    return fx_convert(amount, src, default)
+
+
+def _convert_amount(
+    amount: float,
+    currency_id: object,
+    view: tuple[str, dict[int, str]] | None,
+) -> float:
+    converted = _try_convert(amount, currency_id, view)
+    return converted if converted is not None else 0.0
 
 
 def _occurred_on(row: dict[str, Any]) -> date:

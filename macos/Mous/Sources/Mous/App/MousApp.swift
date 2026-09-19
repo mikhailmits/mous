@@ -7,6 +7,9 @@ import MousCore
 enum MousMain {
     static func main() {
         let app = NSApplication.shared
+        if MousHarness.isHeadless {
+            app.setActivationPolicy(.accessory)
+        }
         let delegate = AppDelegate()
         app.delegate = delegate
         // Keep the delegate alive for the lifetime of the app.
@@ -17,6 +20,20 @@ enum MousMain {
 
 private nonisolated(unsafe) var delegateKey: UInt8 = 0
 
+enum MousHarness {
+    static var isHeadless: Bool {
+        ProcessInfo.processInfo.environment["MOUS_HEADLESS"] != nil
+    }
+
+    /// Keep the panel ordered in when an isolated harness is driving it.
+    static var keepsPanelVisible: Bool {
+        let env = ProcessInfo.processInfo.environment
+        return isHeadless
+            || env["MOUS_DEMO_TYPE"] != nil
+            || env["MOUS_DEMO_TIP"] != nil
+    }
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var store: AppStore!
@@ -24,15 +41,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var reportMonitor: SummaryReportMonitor?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.regular)
+        NSApp.setActivationPolicy(MousHarness.isHeadless ? .accessory : .regular)
+        MoneyDisplay.useStubQuotes()
         LocalBackend.shared.kickoff()
         MousAppearance.apply(MousConfigFile.load().theme)
         store = AppStore(client: APIClient(baseURL: LocalBackend.apiBaseURL()))
         let reportNotice = ReportNoticeChrome()
         let panel = BorderlessPanelController(store: store, reportNotice: reportNotice)
         self.panel = panel
-        let monitor = SummaryReportMonitor(notice: reportNotice) { [weak self] in
-            self?.panel?.openFromReportAlert()
+        let monitor = SummaryReportMonitor(notice: reportNotice) { [weak self] capturedAt in
+            self?.panel?.openFromReportAlert(capturedAt: capturedAt)
         }
         reportMonitor = monitor
         monitor.start()
@@ -86,10 +104,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
+        if MousHarness.isHeadless { return }
         panel?.show()
     }
 
     func applicationDidResignActive(_ notification: Notification) {
+        if MousHarness.keepsPanelVisible { return }
         panel?.hide()
     }
 }

@@ -45,13 +45,25 @@ struct CategoryDTO: Decodable {
     var domain: Category { Category(id: id, name: name) }
 }
 
+struct BalancePartDTO: Decodable {
+    var currencyId: Int
+    var amount: Double
+}
+
 struct BalanceDTO: Decodable {
     var accountId: Int
     var amount: Double
+    var currency: String?
+    var byCurrency: [BalancePartDTO]?
 
-    func amountValue() throws -> Double {
+    func domain() throws -> AccountBalance {
         guard amount.isFinite else { throw APIError.undecodable }
-        return amount
+        var parts: [AccountBalance.Part] = []
+        for part in byCurrency ?? [] {
+            guard part.amount.isFinite else { throw APIError.undecodable }
+            parts.append(AccountBalance.Part(currencyID: part.currencyId, amount: part.amount))
+        }
+        return AccountBalance(amount: amount, currency: currency, byCurrency: parts)
     }
 }
 

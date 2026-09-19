@@ -10,4 +10,8 @@ def utc_date_to_unix(value: date) -> int:
 
 
 def utc_today() -> date:
-    return datetime.now(timezone.utc).date()
+    """Local civil date, stored as UTC midnight of that calendar day.
+
+    Same encoding the popup uses for `CivilDate.localToday`.
+    """
+    return date.today()

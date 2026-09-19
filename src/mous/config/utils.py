@@ -20,8 +20,19 @@ _DEFAULT_PORT = 8000
 _DEFAULT_REPORT_PERIOD = "14 days"
 _DEFAULT_THEME = "system"
 _DEFAULT_CURRENCY = "eur"
+_DEFAULT_HIDE_BALANCE_STYLE = "scramble"
 _THEMES = frozenset({"system", "light", "dark"})
-_REQUIRED_KEYS = ("dev", "report_period", "theme", "currency", "notify_in_app", "notify_macos")
+_HIDE_BALANCE_STYLES = frozenset({"scramble", "veil"})
+_REQUIRED_KEYS = (
+    "dev",
+    "report_period",
+    "theme",
+    "currency",
+    "notify_in_app",
+    "notify_macos",
+    "hide_balance",
+    "hide_balance_style",
+)
 
 
 class MousConfig(TypedDict):
@@ -34,6 +45,8 @@ class MousConfig(TypedDict):
     currency: str
     notify_in_app: bool
     notify_macos: bool
+    hide_balance: bool
+    hide_balance_style: str
 
 
 def is_frozen() -> bool:
@@ -87,6 +100,8 @@ def default_config() -> MousConfig:
         "currency": _DEFAULT_CURRENCY,
         "notify_in_app": True,
         "notify_macos": True,
+        "hide_balance": False,
+        "hide_balance_style": _DEFAULT_HIDE_BALANCE_STYLE,
     }
 
 
@@ -126,6 +141,11 @@ def load_config() -> MousConfig:
         cfg["notify_in_app"] = raw["notify_in_app"]
     if isinstance(raw.get("notify_macos"), bool):
         cfg["notify_macos"] = raw["notify_macos"]
+    if isinstance(raw.get("hide_balance"), bool):
+        cfg["hide_balance"] = raw["hide_balance"]
+    style = raw.get("hide_balance_style")
+    if isinstance(style, str) and style.strip().lower() in _HIDE_BALANCE_STYLES:
+        cfg["hide_balance_style"] = style.strip().lower()
     return cfg
 
 
@@ -139,8 +159,9 @@ def ensure_config() -> MousConfig:
     """Create config.json with defaults if it does not exist.
 
     If the file exists but is missing `dev`, `report_period`, `theme`, `currency`,
-    or the notify flags, write the merged defaults so those keys are visible
-    without clobbering host / port / database_path.
+    notify flags, `hide_balance`, or `hide_balance_style`, write the merged
+    defaults so those keys are visible without clobbering host / port /
+    database_path.
     """
     path = config_path()
     if not path.is_file():

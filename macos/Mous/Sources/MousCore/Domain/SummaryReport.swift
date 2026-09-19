@@ -213,6 +213,59 @@ public struct SummaryReportFigures: Equatable, Sendable {
         return currency.isEmpty ? amount : "\(amount) \(currency)"
     }
 
+    /// Convert money fields into `code` (EUR/USD/UAH stub). Runway stays days.
+    public func displayed(in code: String, using book: FXBook? = nil) -> SummaryReportFigures {
+        let from = Self.isoCurrencyCode(currency) ?? currency
+        let to = Self.isoCurrencyCode(code) ?? code
+        func money(_ value: Double) -> Double? {
+            MoneyDisplay.convert(value, from: from, to: to, using: book)
+        }
+        guard let income = money(self.income),
+              let expense = money(self.expense),
+              let saved = money(self.saved)
+        else { return self }
+        let convertedNext: Double?
+        if let nextMonth = self.nextMonth {
+            guard let value = money(nextMonth) else { return self }
+            convertedNext = value
+        } else {
+            convertedNext = nil
+        }
+        return SummaryReportFigures(
+            range: range,
+            currency: to,
+            count: count,
+            income: income,
+            expense: expense,
+            saved: saved,
+            top: top,
+            runway: runway,
+            nextMonth: convertedNext
+        )
+    }
+
+    /// `runway` from `mous summary` is days, not money.
+    public func formatRunway(_ days: Double) -> String {
+        let rounded = days.rounded()
+        let count = rounded.isFinite ? Int(rounded) : 0
+        if count == 1 { return "1 day" }
+        return "\(count) days"
+    }
+
+    /// `saved / in`, or `0%` when there is no income (no minus amounts).
+    public func formatSavedPercent() -> String {
+        savedRatio.formatted(
+            FloatingPointFormatStyle<Double>.Percent()
+                .precision(.fractionLength(0))
+        )
+    }
+
+    public var savedRatio: Double {
+        guard income > 0, income.isFinite, saved.isFinite else { return 0 }
+        let ratio = saved / income
+        return ratio.isFinite ? ratio : 0
+    }
+
     private static func isoCurrencyCode(_ raw: String) -> String? {
         switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case "eur", "€", "euro": return "EUR"

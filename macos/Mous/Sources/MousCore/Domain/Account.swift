@@ -12,3 +12,28 @@ public struct Account: Equatable, Sendable, Identifiable {
         accounts.first(where: { $0.name == "main" }) ?? accounts.first
     }
 }
+
+/// `GET /accounts/{id}/balance`. `amount` is converted to the default currency;
+/// `byCurrency` stays native so the client can convert each bucket.
+public struct AccountBalance: Equatable, Sendable {
+    public struct Part: Equatable, Sendable {
+        public var currencyID: Int
+        public var amount: Double
+
+        public init(currencyID: Int, amount: Double) {
+            self.currencyID = currencyID
+            self.amount = amount
+        }
+    }
+
+    public var amount: Double
+    /// ISO code for `amount`. Native leftover lives in `byCurrency`.
+    public var currency: String?
+    public var byCurrency: [Part]
+
+    public init(amount: Double, currency: String? = nil, byCurrency: [Part] = []) {
+        self.amount = amount
+        self.currency = currency
+        self.byCurrency = byCurrency
+    }
+}

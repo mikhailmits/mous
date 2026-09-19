@@ -125,10 +125,12 @@ struct UpdatesSettingsField: View {
     var body: some View {
         VStack(spacing: 8) {
             Button(action: check) {
-                row(title: "Check for updates", trailing: checkTrailing)
+                row(title: checkTitle, trailing: checkTrailing)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Check for updates")
+            .disabled(status == .checking)
+            .accessibilityLabel(checkTitle)
+            .accessibilityIdentifier("Check for updates")
             .accessibilityValue(checkTrailing)
             .accessibilityHint("Looks up the latest Mous release on GitHub.")
 
@@ -146,11 +148,21 @@ struct UpdatesSettingsField: View {
             }
         }
         .animation(reduceMotion ? .easeOut(duration: 0.12) : .snappy(duration: 0.22), value: showsUpdate)
+        .animation(reduceMotion ? .easeOut(duration: 0.12) : .snappy(duration: 0.22), value: status)
     }
 
     private var showsUpdate: Bool {
         if case .available = status { return true }
         return false
+    }
+
+    private var checkTitle: String {
+        switch status {
+        case .failed:
+            return "Retry"
+        default:
+            return "Check for updates"
+        }
     }
 
     private var checkTrailing: String {
@@ -160,7 +172,7 @@ struct UpdatesSettingsField: View {
         case .checking:
             return "Checking…"
         case .upToDate:
-            return "Up to date"
+            return "✓ Up to date"
         case .available(let version):
             return "\(version) available"
         case .failed:

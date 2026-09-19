@@ -25,11 +25,12 @@ public enum SpendingLineParser {
         }
 
         let afterSign = trimmed[trimmed.index(after: trimmed.startIndex)...]
-        if afterSign.isEmpty {
+        let amountInput = afterSign.drop(while: { $0.isWhitespace })
+        if amountInput.isEmpty {
             return .incomplete(.signOnly)
         }
 
-        switch scanAmount(afterSign) {
+        switch scanAmount(amountInput) {
         case .failed(let error):
             return .invalid(error)
         case .incomplete(let reason):
@@ -65,7 +66,7 @@ public enum SpendingLineParser {
         case .invalid(.noCurrencies) where currenciesLoading:
             return returnFailed ? .committedInvalid : .composing
         case .invalid:
-            return .committedInvalid
+            return returnFailed ? .committedInvalid : .composing
         }
     }
 
@@ -166,9 +167,7 @@ public enum SpendingLineParser {
             case .incompletePrefix:
                 return .incomplete(.currencyPrefix)
             case .unknown:
-                return .invalid(.unknownCurrency)
-            case .unexpected:
-                return .invalid(.unexpectedInput)
+                break
             }
         } else if looksLikeScientific(remaining) || remaining.first == "," || remaining.first == "." {
             return .invalid(.notNumber)
@@ -178,8 +177,16 @@ public enum SpendingLineParser {
 
         if remaining.first?.isWhitespace == true {
             remaining = remaining.drop(while: { $0.isWhitespace })
-        } else if !remaining.isEmpty {
-            return .invalid(.unexpectedInput)
+            if currency == nil, !remaining.isEmpty {
+                switch matchCurrency(remaining, currencies: currencies) {
+                case .matched(let matched, let after)
+                    where after.isEmpty || after.first?.isWhitespace == true:
+                    currency = matched
+                    remaining = after.drop(while: { $0.isWhitespace })
+                default:
+                    break
+                }
+            }
         }
 
         let description = String(remaining)
@@ -213,7 +220,6 @@ public enum SpendingLineParser {
         case matched(Currency, Substring)
         case incompletePrefix
         case unknown
-        case unexpected
     }
 
     private static func matchCurrency(_ rest: Substring, currencies: [Currency]) -> CurrencyMatch {
@@ -227,7 +233,6 @@ public enum SpendingLineParser {
             if after.isEmpty || after.first?.isWhitespace == true {
                 return .matched(currency, after)
             }
-            return .unexpected
         }
 
         let letterRun = rest.prefix { $0.isLetter }

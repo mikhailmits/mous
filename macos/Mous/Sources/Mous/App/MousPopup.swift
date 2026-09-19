@@ -45,9 +45,7 @@ struct MousPopup: View {
                 homeStack
                     .overlay {
                         if commandHints.showOptionsMenu {
-                            Color.clear
-                                .contentShape(Rectangle())
-                                .onTapGesture { closeOptionsMenu() }
+                            OptionsMenuDismissHit(action: closeOptionsMenu)
                         }
                     }
                     .overlay(alignment: .topTrailing) {
@@ -57,7 +55,8 @@ struct MousPopup: View {
                             onSettings: openSettings,
                             onNotifications: openNotifications,
                             showCommandHints: commandHints.visible,
-                            reduceMotion: reduceMotion
+                            reduceMotion: reduceMotion,
+                            dimmed: !store.text.isEmpty && !commandHints.showOptionsMenu
                         )
                         .padding(8)
                     }
@@ -121,6 +120,7 @@ struct MousPopup: View {
                 isRefreshing: store.isRefreshing,
                 statusMessage: store.statusMessage,
                 currencyCode: store.displayCurrencyCode,
+                hideBalance: store.hideBalance,
                 onSpendHover: { inside in
                     guard store.hasLoadedDashboard else { return }
                     onSpendHover(inside)
@@ -165,9 +165,10 @@ struct MousPopup: View {
     }
 
     private func closeOptionsMenu() {
-        withAnimation(reduceMotion ? .easeOut(duration: 0.12) : .snappy(duration: 0.22)) {
+        withAnimation(.easeOut(duration: 0.12)) {
             commandHints.showOptionsMenu = false
         }
+        NotificationCenter.default.post(name: .mousRestoreInputFocus, object: nil)
     }
 
     private func closeSettings() {

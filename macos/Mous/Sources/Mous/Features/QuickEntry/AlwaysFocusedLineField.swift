@@ -11,9 +11,10 @@ struct AlwaysFocusedLineField: NSViewRepresentable {
     @Binding var text: String
     var placeholder: String
     var onSubmit: () -> Void
+    var onTab: () -> Void = {}
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text, onSubmit: onSubmit)
+        Coordinator(text: $text, onSubmit: onSubmit, onTab: onTab)
     }
 
     func makeNSView(context: Context) -> StickyTextField {
@@ -25,21 +26,15 @@ struct AlwaysFocusedLineField: NSViewRepresentable {
         let font = NSFont.monospacedDigitSystemFont(ofSize: 16, weight: .regular)
         field.font = font
         field.textColor = .labelColor
-        // Quieter placeholder than the default secondary color, so typed text
-        // clearly outranks the hint.
-        field.placeholderAttributedString = NSAttributedString(
-            string: placeholder,
-            attributes: [
-                .foregroundColor: NSColor.tertiaryLabelColor,
-                .font: font,
-            ]
-        )
+        applyPlaceholder(placeholder, to: field, font: font)
         field.delegate = context.coordinator
         field.lineBreakMode = .byTruncatingTail
         field.cell?.wraps = false
         field.cell?.isScrollable = true
         field.cell?.usesSingleLineMode = true
         field.refusesFirstResponder = false
+        field.setAccessibilityLabel("New transaction")
+        field.setAccessibilityIdentifier("New transaction")
         field.setContentHuggingPriority(.defaultLow, for: .horizontal)
         field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         context.coordinator.field = field
@@ -50,15 +45,32 @@ struct AlwaysFocusedLineField: NSViewRepresentable {
     func updateNSView(_ field: StickyTextField, context: Context) {
         context.coordinator.text = $text
         context.coordinator.onSubmit = onSubmit
+        context.coordinator.onTab = onTab
         if field.stringValue != text {
             field.stringValue = text
-            // Programmatic text change (e.g. demo typing): keep the caret at
-            // the end instead of leaving everything selected.
+            // Programmatic rewrite (FX convert, demo type): keep the caret at
+            // the end. Setting stringValue without an editor selects all.
             if let editor = field.currentEditor() {
                 editor.selectedRange = NSRange(location: (text as NSString).length, length: 0)
             }
         }
+        applyPlaceholder(placeholder, to: field, font: field.font)
         context.coordinator.claimFocusIfNeeded()
+    }
+
+    private func applyPlaceholder(_ placeholder: String, to field: NSTextField, font: NSFont?) {
+        let font = font ?? NSFont.monospacedDigitSystemFont(ofSize: 16, weight: .regular)
+        // Quieter placeholder than the default secondary color, so typed text
+        // clearly outranks the hint.
+        if field.placeholderAttributedString?.string != placeholder {
+            field.placeholderAttributedString = NSAttributedString(
+                string: placeholder,
+                attributes: [
+                    .foregroundColor: NSColor.tertiaryLabelColor,
+                    .font: font,
+                ]
+            )
+        }
     }
 
     static func dismantleNSView(_ field: StickyTextField, coordinator: Coordinator) {
@@ -68,12 +80,14 @@ struct AlwaysFocusedLineField: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextFieldDelegate {
         var text: Binding<String>
         var onSubmit: () -> Void
+        var onTab: () -> Void
         weak var field: StickyTextField?
         private var observers: [NSObjectProtocol] = []
 
-        init(text: Binding<String>, onSubmit: @escaping () -> Void) {
+        init(text: Binding<String>, onSubmit: @escaping () -> Void, onTab: @escaping () -> Void) {
             self.text = text
             self.onSubmit = onSubmit
+            self.onTab = onTab
         }
 
         func startObserving() {
@@ -114,6 +128,13 @@ struct AlwaysFocusedLineField: NSViewRepresentable {
                 || commandSelector == #selector(NSResponder.insertLineBreak(_:))
             {
                 onSubmit()
+                return true
+            }
+            if commandSelector == #selector(NSResponder.insertTab(_:))
+                || commandSelector == #selector(NSResponder.insertBacktab(_:))
+                || commandSelector == #selector(NSResponder.insertTabIgnoringFieldEditor(_:))
+            {
+                onTab()
                 return true
             }
             return false
