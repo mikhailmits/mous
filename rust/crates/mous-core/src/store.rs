@@ -47,6 +47,12 @@ impl Store {
         conn.pragma_update(None, "journal_mode", "WAL").ok();
         conn.pragma_update(None, "synchronous", "NORMAL").ok();
         conn.pragma_update(None, "foreign_keys", "ON")?;
+        // Speed: keep temp tables in RAM, memory-map the file, and give SQLite a
+        // generous page cache. All are safe and improve read/query latency.
+        conn.pragma_update(None, "temp_store", "MEMORY").ok();
+        conn.pragma_update(None, "mmap_size", 268_435_456i64).ok(); // 256 MiB
+        conn.pragma_update(None, "cache_size", -65_536i64).ok(); // ~64 MiB
+        conn.busy_timeout(std::time::Duration::from_secs(5)).ok();
         let store = Store { conn };
         store.adopt_legacy_tables()?;
         store.init_schema()?;

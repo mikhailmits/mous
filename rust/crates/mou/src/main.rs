@@ -270,7 +270,7 @@ fn connect_or_spawn() -> io::Result<UnixStream> {
     loop {
         match UnixStream::connect(&sock) {
             Ok(stream) => return Ok(stream),
-            Err(_) if Instant::now() < deadline => thread::sleep(Duration::from_millis(20)),
+            Err(_) if Instant::now() < deadline => thread::sleep(Duration::from_millis(1)),
             Err(e) => return Err(e),
         }
     }
@@ -289,7 +289,7 @@ fn replace_stale_daemon() {
     shutdown_if_running();
     let deadline = Instant::now() + Duration::from_secs(2);
     while sock.exists() && Instant::now() < deadline {
-        thread::sleep(Duration::from_millis(20));
+        thread::sleep(Duration::from_millis(1));
     }
 }
 
