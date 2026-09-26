@@ -339,29 +339,6 @@ impl Store {
         Ok(())
     }
 
-    pub fn cur_ensure(
-        &self,
-        symbol: &str,
-        name: Option<&str>,
-        make_default: bool,
-    ) -> Result<CurView> {
-        let id = self.resolve_or_create_currency(symbol)?;
-        if let Some(name) = name.map(str::trim).filter(|s| !s.is_empty()) {
-            let current = self.cur_get(id)?;
-            if current.name != name {
-                self.conn.execute(
-                    "UPDATE currency SET name = ?1 WHERE id = ?2",
-                    params![name, id],
-                )?;
-            }
-        }
-        if make_default {
-            let sym = self.cur_get(id)?.symbol;
-            return self.cur_set_default(&sym);
-        }
-        self.cur_get(id)
-    }
-
     // ---- transactions ------------------------------------------------------
 
     pub fn tx_new(&self, tx: &NewTx) -> Result<TxView> {

@@ -294,14 +294,6 @@ fn dispatch(store: &Mutex<Store>, req: Request) -> Response {
         }
         Request::CurSetDefault { symbol } => wrap(store.cur_set_default(&symbol), Response::Cur),
         Request::CurDelete(id) => wrap(store.cur_delete(id), |_| Response::Ok),
-        Request::CurEnsure {
-            symbol,
-            name,
-            make_default,
-        } => wrap(
-            store.cur_ensure(&symbol, name.as_deref(), make_default),
-            Response::Cur,
-        ),
     }
 }
 

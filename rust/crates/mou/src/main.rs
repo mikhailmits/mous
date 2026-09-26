@@ -117,25 +117,6 @@ struct CurArgs {
     /// Set the default currency (auto-created if missing).
     #[arg(long = "set-default", value_name = "SYMBOL", allow_hyphen_values = true)]
     set_default: Option<String>,
-    #[command(subcommand)]
-    command: Option<CurCmd>,
-}
-
-#[derive(Subcommand, Debug)]
-enum CurCmd {
-    /// Create a currency if it does not exist, or return the existing one.
-    New(CurNewArgs),
-}
-
-#[derive(Args, Debug)]
-struct CurNewArgs {
-    #[arg(allow_hyphen_values = true)]
-    symbol: String,
-    #[arg(long, allow_hyphen_values = true)]
-    name: Option<String>,
-    /// Also make this the default currency.
-    #[arg(long)]
-    default: bool,
 }
 
 enum Format {
@@ -203,13 +184,6 @@ fn build_request(cli: &Cli) -> Result<Option<Request>, String> {
 }
 
 fn build_cur_request(args: &CurArgs) -> Result<Request, String> {
-    if let Some(CurCmd::New(new)) = &args.command {
-        return Ok(Request::CurEnsure {
-            symbol: new.symbol.clone(),
-            name: new.name.clone(),
-            make_default: new.default,
-        });
-    }
     if let Some(symbol) = &args.set_default {
         return Ok(Request::CurSetDefault {
             symbol: symbol.clone(),
@@ -556,7 +530,7 @@ fn print_usage() {
     println!("  mou --id N --edit-amount ±V --edit-date YYYY-MM-DD --edit-category NAME");
     println!();
     println!("Currencies:");
-    println!("  mou cur --all | --id N | new SYM [--name ..] [--default] | --set-default SYM");
+    println!("  mou cur --all | --id N | --set-default SYM   (currencies auto-create on use)");
     println!("  mou cur --edit-symbol SYM --id N | -d --id N");
     println!();
     println!("Output: --json | --yaml (default: table)");

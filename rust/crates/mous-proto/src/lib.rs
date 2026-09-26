@@ -11,7 +11,7 @@ use std::io::{self, Read, Write};
 pub mod paths;
 
 /// Bumped when the wire format changes incompatibly.
-pub const PROTOCOL_VERSION: u32 = 2;
+pub const PROTOCOL_VERSION: u32 = 3;
 
 /// Guard against absurd allocations from a corrupt/hostile length prefix.
 pub const MAX_FRAME_BYTES: usize = 64 * 1024 * 1024;
@@ -33,12 +33,6 @@ pub enum Request {
     CurEditSymbol { id: i64, symbol: String },
     CurSetDefault { symbol: String },
     CurDelete(i64),
-    /// Create a currency by symbol, or return the existing row.
-    CurEnsure {
-        symbol: String,
-        name: Option<String>,
-        make_default: bool,
-    },
 }
 
 /// Filters for listing transactions. All fields are optional/empty by default.
