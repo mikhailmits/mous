@@ -108,7 +108,7 @@ public enum SpendingLineParser {
             index = input.index(after: index)
             while index < end, isASCIIDigit(input[index]) {
                 fractionDigits += 1
-                if fractionDigits > 2 {
+                if fractionDigits > 8 {
                     return .failed(.tooManyFractionDigits)
                 }
                 index = input.index(after: index)
@@ -117,6 +117,10 @@ public enum SpendingLineParser {
 
         let amountSlice = input[..<index]
         let rest = input[index...]
+
+        if fractionDigits > maxFractionDigits(after: input[index...]) {
+            return .failed(.tooManyFractionDigits)
+        }
 
         if hadDot, fractionDigits == 0 {
             if rest.isEmpty {
@@ -159,7 +163,7 @@ public enum SpendingLineParser {
         var remaining = rest
         var currency: Currency?
 
-        if let first = remaining.first, first.isLetter {
+        if let first = remaining.first, first.isLetter || first.isNumber {
             switch matchCurrency(remaining, currencies: currencies) {
             case .matched(let matched, let after):
                 currency = matched
@@ -167,7 +171,10 @@ public enum SpendingLineParser {
             case .incompletePrefix:
                 return .incomplete(.currencyPrefix)
             case .unknown:
-                break
+                if let (code, after) = FxSymbols.matchSpendToken(remaining) {
+                    currency = Currency(id: 0, symbol: code, name: code.uppercased(), isDefault: false)
+                    remaining = after
+                }
             }
         } else if looksLikeScientific(remaining) || remaining.first == "," || remaining.first == "." {
             return .invalid(.notNumber)
@@ -183,8 +190,13 @@ public enum SpendingLineParser {
                     where after.isEmpty || after.first?.isWhitespace == true:
                     currency = matched
                     remaining = after.drop(while: { $0.isWhitespace })
-                default:
-                    break
+                case .incompletePrefix:
+                    return .incomplete(.currencyPrefix)
+                case .unknown, .matched:
+                    if let (code, after) = FxSymbols.matchSpendToken(remaining) {
+                        currency = Currency(id: 0, symbol: code, name: code.uppercased(), isDefault: false)
+                        remaining = after.drop(while: { $0.isWhitespace })
+                    }
                 }
             }
         }
@@ -235,13 +247,13 @@ public enum SpendingLineParser {
             }
         }
 
-        let letterRun = rest.prefix { $0.isLetter }
+        let letterRun = rest.prefix { $0.isLetter || $0.isNumber }
         if letterRun.count == rest.count {
             let prefix = String(letterRun).lowercased()
             let isStrictPrefix = currencies.contains {
                 let symbol = $0.symbol.lowercased()
                 return symbol.hasPrefix(prefix) && symbol != prefix
-            }
+            } || FxSymbols.isStrictPrefix(prefix)
             if isStrictPrefix {
                 return .incompletePrefix
             }
@@ -268,6 +280,16 @@ public enum SpendingLineParser {
             return .ok(eur)
         }
         return .failed(.eurRequired)
+    }
+
+    /// Fiat stays at 2 (or 0/3) digits. Crypto may carry up to 8.
+    private static func maxFractionDigits(after rest: Substring) -> Int {
+        let token = rest.prefix { $0.isLetter || $0.isNumber }
+        guard let code = FxSymbols.exact(String(token)) else { return 2 }
+        let cut = rest.index(rest.startIndex, offsetBy: token.count)
+        let after = rest[cut...]
+        guard after.isEmpty || after.first?.isWhitespace == true else { return 2 }
+        return FxSymbols.fractionDigits(code)
     }
 
     private static func isASCIIDigit(_ character: Character) -> Bool {

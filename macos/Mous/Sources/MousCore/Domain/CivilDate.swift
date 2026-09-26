@@ -33,18 +33,28 @@ public struct CivilDate: Equatable, Hashable, Sendable, Comparable {
         return CivilDate(year: today.year, month: today.month, day: 1)
     }
 
+    /// UTC midnight for this civil day. Built with an explicit UTC gregorian
+    /// calendar so a system timezone cannot shift the day (off-by-one).
+    /// `YYYY-MM-DD` for the `mou` CLI. Not locale-dependent.
+    public var isoDay: String {
+        String(format: "%04d-%02d-%02d", CInt(year), CInt(month), CInt(day))
+    }
+
     public var unixUTCMidnight: Int {
-        var parts = DateComponents()
-        parts.calendar = Calendar(identifier: .gregorian)
-        parts.timeZone = TimeZone(secondsFromGMT: 0)
-        parts.year = year
-        parts.month = month
-        parts.day = day
-        parts.hour = 0
-        parts.minute = 0
-        parts.second = 0
-        let date = parts.date ?? Date(timeIntervalSince1970: 0)
-        return Int(date.timeIntervalSince1970)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let parts = DateComponents(
+            calendar: calendar,
+            timeZone: calendar.timeZone,
+            year: year,
+            month: month,
+            day: day,
+            hour: 0,
+            minute: 0,
+            second: 0
+        )
+        let date = calendar.date(from: parts) ?? Date(timeIntervalSince1970: 0)
+        return Int(date.timeIntervalSince1970.rounded())
     }
 
     public static func fromUnixUTCMidnight(_ unix: Int) -> CivilDate {

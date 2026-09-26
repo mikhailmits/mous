@@ -1,4 +1,4 @@
-"""MousCoreCheck: parser, FX, dashboard, config, inbox, API client."""
+"""MousCoreCheck: parser, FX, dashboard, config, assist, API client."""
 
 from __future__ import annotations
 

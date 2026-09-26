@@ -54,51 +54,13 @@ class PublicCLI:
     def start(cls) -> None:
         cls().run()
 
-    def add_commands(self, sub: argparse._SubParsersAction) -> None:
-        summary = sub.add_parser(
-            "summary",
-            help="Period report: n, in, out, saved, top, runway",
-        )
-        summary.add_argument(
-            "period",
-            nargs="*",
-            metavar="PERIOD",
-            help="How far back (default: config report_period). Examples: month, 1 day, 2 weeks, 1 year",
-        )
-
-    def handle(self, args: argparse.Namespace) -> bool:
-        if args.command == "summary":
-            from mous.services.api import APIUnavailable
-            from mous.services.summary import PeriodParseError
-
-            period = " ".join(args.period) if args.period else None
-            try:
-                self.summary(period)
-            except PeriodParseError as exc:
-                print(exc, file=sys.stderr)
-                raise SystemExit(2) from exc
-            except APIUnavailable as exc:
-                print(exc, file=sys.stderr)
-                raise SystemExit(1) from exc
-            return True
-        return False
-
     def run(self) -> None:
         parser = argparse.ArgumentParser(
             prog="mous",
             description="This is a simple wrapper around API that covers basic read only operations",
         )
-        sub = parser.add_subparsers(dest="command")
-        self.add_commands(sub)
-        args = parser.parse_args()
-        if self.handle(args):
-            return
+        parser.parse_args()
         parser.print_help()
-
-    def summary(self, period: str | None = None) -> None:
-        from mous.services.summary import build_summary, format_summary
-
-        print(format_summary(build_summary(period)), end="")
 
 
 class DevCLI(PublicCLI):
@@ -120,7 +82,6 @@ class DevCLI(PublicCLI):
     def run(self) -> None:
         parser = argparse.ArgumentParser(prog="mous")
         sub = parser.add_subparsers(dest="command")
-        self.add_commands(sub)
         serve = sub.add_parser("serve", help="Run the HTTP API")
         serve.add_argument("--host", default=api_host())
         serve.add_argument("--port", type=int, default=api_port())
@@ -140,8 +101,6 @@ class DevCLI(PublicCLI):
                 self.drop_docker()
             else:
                 self.drop_local()
-            return
-        if self.handle(args):
             return
         parser.print_help()
 

@@ -37,204 +37,219 @@ public enum LoopbackHTTP: Sendable {
     }
 }
 
+public struct MouResult: Sendable, Equatable {
+    public var status: Int32
+    public var stdout: Data
+    public var stderr: Data
+
+    public init(status: Int32, stdout: Data, stderr: Data) {
+        self.status = status
+        self.stdout = stdout
+        self.stderr = stderr
+    }
+}
+
+public typealias MouRunner = @Sendable ([String]) throws -> MouResult
+
+/// Finds `mou` / `mousd` and runs one CLI invocation.
+public enum MouLaunch {
+    public static func resolve() -> (mou: String, mousd: String?) {
+        let env = ProcessInfo.processInfo.environment
+        if let mou = env["MOU_BIN"], !mou.isEmpty {
+            let daemon = env["MOUSD_BIN"].flatMap { $0.isEmpty ? nil : $0 }
+            return (mou, daemon)
+        }
+        let fm = FileManager.default
+        if let exe = Bundle.main.executableURL {
+            let dir = exe.deletingLastPathComponent()
+            let beside = executablePair(mou: dir.appendingPathComponent("mou"), mousd: dir.appendingPathComponent("mousd"))
+            if let beside { return beside }
+        }
+        var dir = URL(fileURLWithPath: fm.currentDirectoryPath)
+        for _ in 0..<8 {
+            for config in ["release", "debug"] {
+                let root = dir.appendingPathComponent("rust/target/\(config)", isDirectory: true)
+                if let pair = executablePair(
+                    mou: root.appendingPathComponent("mou"),
+                    mousd: root.appendingPathComponent("mousd")
+                ) {
+                    return pair
+                }
+            }
+            let parent = dir.deletingLastPathComponent()
+            if parent.path == dir.path { break }
+            dir = parent
+        }
+        return ("mou", nil)
+    }
+
+    public static func run(_ args: [String]) throws -> MouResult {
+        let found = resolve()
+        let process = Process()
+        if found.mou.contains("/") {
+            process.executableURL = URL(fileURLWithPath: found.mou)
+            process.arguments = args
+        } else {
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.arguments = [found.mou] + args
+        }
+        var env = ProcessInfo.processInfo.environment
+        if let mousd = found.mousd {
+            env["MOUSD_BIN"] = mousd
+        }
+        process.environment = env
+        process.standardInput = FileHandle.nullDevice
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+        try process.run()
+
+        let stdout = LockedData()
+        let stderr = LockedData()
+        let group = DispatchGroup()
+        group.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
+            stdout.set(stdoutPipe.fileHandleForReading.readDataToEndOfFile())
+            group.leave()
+        }
+        group.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
+            stderr.set(stderrPipe.fileHandleForReading.readDataToEndOfFile())
+            group.leave()
+        }
+        process.waitUntilExit()
+        group.wait()
+        return MouResult(status: process.terminationStatus, stdout: stdout.get(), stderr: stderr.get())
+    }
+
+    private static func executablePair(mou: URL, mousd: URL) -> (String, String?)? {
+        let fm = FileManager.default
+        guard fm.isExecutableFile(atPath: mou.path) else { return nil }
+        let daemon = fm.isExecutableFile(atPath: mousd.path) ? mousd.path : nil
+        return (mou.path, daemon)
+    }
+}
+
+private final class LockedData: @unchecked Sendable {
+    private let lock = NSLock()
+    private var data = Data()
+    func set(_ value: Data) {
+        lock.lock()
+        data = value
+        lock.unlock()
+    }
+    func get() -> Data {
+        lock.lock()
+        defer { lock.unlock() }
+        return data
+    }
+}
+
 public actor APIClient {
+    /// Kept so older loopback checks still have a pinned fallback URL.
     public static let defaultBaseURL = URL(string: "http://127.0.0.1:8000")!
 
-    private let baseURL: URL
-    private let session: URLSession
+    private let runner: MouRunner
     private let decoder: JSONDecoder
-    private let encoder: JSONEncoder
 
-    public init(baseURL: URL = APIClient.defaultBaseURL, session: URLSession? = nil) {
-        self.baseURL = LoopbackHTTP.pinBaseURL(baseURL)
-        if let session {
-            self.session = session
+    public init(runner: MouRunner? = nil) {
+        if let runner {
+            self.runner = runner
         } else {
-            let config = URLSessionConfiguration.ephemeral
-            config.timeoutIntervalForRequest = 5
-            config.timeoutIntervalForResource = 5
-            config.waitsForConnectivity = false
-            config.httpShouldSetCookies = false
-            config.httpCookieAcceptPolicy = .never
-            config.httpCookieStorage = nil
-            config.urlCache = nil
-            self.session = URLSession(
-                configuration: config,
-                delegate: LoopbackRedirectDelegate(),
-                delegateQueue: nil
-            )
+            self.runner = { args in try MouLaunch.run(args) }
         }
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         self.decoder = decoder
-        let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
-        self.encoder = encoder
-    }
-
-    public func accounts() async throws -> [Account] {
-        let dto: CollectionDTO<AccountDTO> = try await get(path: "/accounts")
-        return dto.items.map(\.domain)
     }
 
     public func currencies() async throws -> [Currency] {
-        let dto: CollectionDTO<CurrencyDTO> = try await get(path: "/currencies")
-        return dto.items.map(\.domain)
+        let rows: [CurrencyDTO] = try decode(try await invoke(["cur", "--all", "--json"]))
+        return rows.map(\.domain)
     }
 
     public func createCurrency(symbol: String, name: String, isDefault: Bool) async throws -> Currency {
-        let payload = CurrencyCreateDTO(symbol: symbol, name: name, isDefault: isDefault)
-        let body = try encoder.encode(payload)
-        let url = baseURL.appending(path: "currencies")
-        let dto: CurrencyDTO = try await request(url: url, method: "POST", body: body)
+        var args = ["cur", "new", symbol, "--name", name]
+        if isDefault { args.append("--default") }
+        args.append("--json")
+        let dto: CurrencyDTO = try decode(try await invoke(args))
         return dto.domain
     }
 
-    public func setDefaultCurrency(id: Int) async throws -> Currency {
-        let payload = CurrencyPatchDTO(isDefault: true)
-        let body = try encoder.encode(payload)
-        let url = baseURL.appending(path: "currencies").appending(path: String(id))
-        let dto: CurrencyDTO = try await request(url: url, method: "PATCH", body: body)
+    public func setDefaultCurrency(symbol: String) async throws -> Currency {
+        let dto: CurrencyDTO = try decode(
+            try await invoke(["cur", "--set-default", symbol, "--json"])
+        )
         return dto.domain
     }
 
-    public func categories() async throws -> [Category] {
-        do {
-            let dto: CollectionDTO<CategoryDTO> = try await get(path: "/categories")
-            return dto.items.map(\.domain)
-        } catch APIError.server(let status, _, _) where status == 404 {
-            return []
-        }
-    }
-
-    public func balance(accountID: Int) async throws -> AccountBalance {
-        let dto: BalanceDTO = try await get(path: "/accounts/\(accountID)/balance")
-        return try dto.domain()
-    }
-
-    public func transactions(accountID: Int, from: CivilDate, to: CivilDate) async throws -> [Transaction] {
-        var parts = URLComponents(
-            url: baseURL.appending(path: "transactions"),
-            resolvingAgainstBaseURL: false
-        )!
-        parts.queryItems = [
-            URLQueryItem(name: "account_id", value: String(accountID)),
-            URLQueryItem(name: "from_unix_time", value: String(from.unixUTCMidnight)),
-            URLQueryItem(name: "to_unix_time", value: String(to.unixUTCMidnight)),
-        ]
-        guard let url = parts.url else { throw APIError.undecodable }
-        let dto: CollectionDTO<TransactionDTO> = try await request(url: url, method: "GET", body: nil)
-        return try dto.items.map { try $0.domain() }
-    }
-
-    public func createCategory(name: String) async throws -> Category {
-        let payload = CategoryCreateDTO(name: name)
-        let body = try encoder.encode(payload)
-        let url = baseURL.appending(path: "categories")
-        let dto: CategoryDTO = try await request(url: url, method: "POST", body: body)
-        return dto.domain
-    }
-
-    public func category(named name: String) async throws -> Category? {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        do {
-            let url = baseURL.appending(path: "categories").appending(path: trimmed)
-            let dto: CategoryDTO = try await request(url: url, method: "GET", body: nil)
-            return dto.domain
-        } catch APIError.server(let status, _, _) where status == 404 {
-            return nil
-        }
+    public func transactions(from: CivilDate, to: CivilDate) async throws -> [Transaction] {
+        let rows: [TransactionDTO] = try decode(
+            try await invoke([
+                "--all",
+                "--since", from.isoDay,
+                "--until", to.isoDay,
+                "--json",
+            ])
+        )
+        return try rows.map { try $0.domain() }
     }
 
     public func createTransaction(
         description: String,
         value: Double,
-        currencyID: Int,
-        occurredOn: CivilDate,
-        accountID: Int? = nil,
-        categoryID: Int? = nil
+        currency: String,
+        occurredOn: CivilDate
     ) async throws -> Transaction {
         guard value.isFinite, value != 0 else { throw APIError.undecodable }
-        let payload = TransactionCreateDTO(
-            name: description,
-            value: value,
-            currencyId: currencyID,
-            accountId: accountID,
-            occurredUnixTime: occurredOn.unixUTCMidnight,
-            categoryId: categoryID
+        let dto: TransactionDTO = try decode(
+            try await invoke([
+                "new", amountString(value),
+                "--name", description,
+                "--curr", currency,
+                "--date", occurredOn.isoDay,
+                "--json",
+            ])
         )
-        let body = try encoder.encode(payload)
-        let url = baseURL.appending(path: "transactions")
-        let dto: TransactionDTO = try await request(url: url, method: "POST", body: body)
         return try dto.domain()
     }
 
-    public func patchTransaction(id: Int, categoryID: Int) async throws -> Transaction {
-        let payload = TransactionPatchDTO(categoryId: categoryID)
-        let body = try encoder.encode(payload)
-        let url = baseURL.appending(path: "transactions").appending(path: String(id))
-        let dto: TransactionDTO = try await request(url: url, method: "PATCH", body: body)
-        return try dto.domain()
-    }
-
-    private func get<T: Decodable>(path: String) async throws -> T {
-        let trimmed = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        return try await request(url: baseURL.appending(path: trimmed), method: "GET", body: nil)
-    }
-
-    private func request<T: Decodable>(url: URL, method: String, body: Data?) async throws -> T {
-        guard LoopbackHTTP.isAllowed(url) else { throw APIError.transport }
-        var request = URLRequest(url: url)
-        request.httpMethod = method
-        request.timeoutInterval = 5
-        request.httpShouldHandleCookies = false
-        if let body {
-            request.httpBody = body
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        }
-        let data: Data
-        let response: URLResponse
+    private func invoke(_ args: [String]) async throws -> Data {
+        let result: MouResult
         do {
-            (data, response) = try await session.data(for: request)
-        } catch let error as URLError where error.code == .timedOut {
-            throw APIError.timeout
+            result = try runner(args)
         } catch {
             throw APIError.transport
         }
-        guard let http = response as? HTTPURLResponse else {
+        if result.status == 0 {
+            return result.stdout
+        }
+        let err = String(data: result.stderr, encoding: .utf8) ?? ""
+        let lower = err.lowercased()
+        if lower.contains("cannot talk to daemon")
+            || lower.contains("failed to spawn")
+            || lower.contains("no such file or directory")
+        {
             throw APIError.transport
         }
-        if (200..<300).contains(http.statusCode) {
-            do {
-                return try decoder.decode(T.self, from: data)
-            } catch {
-                throw APIError.undecodable
-            }
-        }
-        let bodyError = try? decoder.decode(APIErrorBody.self, from: data)
         throw APIError.server(
-            status: http.statusCode,
-            code: bodyError?.error ?? "error",
-            detail: bodyError?.detail ?? ""
+            status: 422,
+            code: "error",
+            detail: err.trimmingCharacters(in: .whitespacesAndNewlines)
         )
     }
-}
 
-final class LoopbackRedirectDelegate: NSObject, URLSessionTaskDelegate, Sendable {
-    func urlSession(
-        _ session: URLSession,
-        task: URLSessionTask,
-        willPerformHTTPRedirection response: HTTPURLResponse,
-        newRequest request: URLRequest,
-        completionHandler: @escaping @Sendable (URLRequest?) -> Void
-    ) {
-        if LoopbackHTTP.isAllowed(request.url) {
-            var pinned = request
-            pinned.httpShouldHandleCookies = false
-            completionHandler(pinned)
-        } else {
-            completionHandler(nil)
+    private func decode<T: Decodable>(_ data: Data) throws -> T {
+        do {
+            return try decoder.decode(T.self, from: data)
+        } catch {
+            throw APIError.undecodable
         }
+    }
+
+    /// Locale-independent. `String(Double)` does not use the user's decimal comma.
+    private func amountString(_ value: Double) -> String {
+        String(value)
     }
 }

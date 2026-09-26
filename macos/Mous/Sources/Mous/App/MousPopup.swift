@@ -4,21 +4,18 @@ import SwiftUI
 struct MousPopup: View {
     @Bindable var store: AppStore
     @Bindable var commandHints: CommandHintState
-    @Bindable var reportNotice: ReportNoticeChrome
     var onQuit: () -> Void = {}
-    var onEscape: () -> Bool = { false }
     var onSizeChange: (CGSize) -> Void = { _ in }
     var onSpendHover: (Bool) -> Void = { _ in }
     var onSavedHover: (Bool) -> Void = { _ in }
     var onAppHover: (Bool) -> Void = { _ in }
     var onOpenSettings: () -> Void = {}
-    var onOpenNotifications: () -> Void = {}
     var onOpenOptionsMenu: () -> Void = {}
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appeared = false
     @State private var homeHeight: CGFloat = 0
-    @State private var colorScheme = MousAppearance.colorScheme(from: MousConfigFile.load().theme)
+    @State private var theme = MousTheme.parse(MousConfigFile.load().theme)
 
     /// Width of the two cards. The window is wider than this by `shadowMargin`
     /// on each side so the card shadows can render on the transparent glass.
@@ -27,12 +24,13 @@ struct MousPopup: View {
 
     var body: some View {
         Group {
-            if store.showLaunchSplash {
+            // Read hasLoadedDashboard in-body so Observation always invalidates
+            // when the first fetch succeeds (computed showLaunchSplash alone can
+            // leave the logo spin up after a good load).
+            if store.showLaunchSplash && !store.hasLoadedDashboard {
                 LaunchSplash()
             } else if commandHints.showSettings {
                 SettingsCard(onClose: closeSettings)
-            } else if commandHints.showNotifications {
-                NotificationsCard(notice: reportNotice, onClose: closeNotifications)
             } else if let kind = commandHints.focusedList {
                 FocusedSpendList(
                     store: store,
@@ -51,9 +49,7 @@ struct MousPopup: View {
                     .overlay(alignment: .topTrailing) {
                         OptionsMenuButton(
                             isOpen: $commandHints.showOptionsMenu,
-                            unreadCount: reportNotice.unreadCount,
                             onSettings: openSettings,
-                            onNotifications: openNotifications,
                             showCommandHints: commandHints.visible,
                             reduceMotion: reduceMotion,
                             dimmed: !store.text.isEmpty && !commandHints.showOptionsMenu
@@ -63,26 +59,28 @@ struct MousPopup: View {
             }
         }
         .frame(width: Self.cardWidth)
-        .animation(reduceMotion ? .easeOut(duration: 0.15) : .easeOut(duration: 0.22), value: store.showLaunchSplash)
-        .animation(reduceMotion ? .easeOut(duration: 0.12) : .snappy(duration: 0.22), value: commandHints.focusedList)
-        .animation(reduceMotion ? .easeOut(duration: 0.12) : .snappy(duration: 0.22), value: commandHints.showSettings)
-        .animation(reduceMotion ? .easeOut(duration: 0.12) : .snappy(duration: 0.22), value: commandHints.showNotifications)
-        .animation(reduceMotion ? .easeOut(duration: 0.12) : .snappy(duration: 0.22), value: reportNotice.unreadCount)
+        .animation(MousMotion.fade(reduceMotion: reduceMotion), value: store.showLaunchSplash)
+        .animation(MousMotion.fade(reduceMotion: reduceMotion), value: store.hasLoadedDashboard)
+        .animation(MousMotion.spring(reduceMotion: reduceMotion), value: commandHints.focusedList)
+        .animation(MousMotion.spring(reduceMotion: reduceMotion), value: commandHints.showSettings)
         .onChange(of: commandHints.showOptionsMenu) { _, open in
             if open { onOpenOptionsMenu() }
         }
         .onChange(of: commandHints.showSettings) { _, showing in
             if !showing {
-                colorScheme = MousAppearance.colorScheme(from: MousConfigFile.load().theme)
+                theme = MousTheme.parse(MousConfigFile.load().theme)
                 Task { await store.reloadPreferences() }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .mousAppearanceDidChange)) { notification in
-            guard let raw = notification.object as? String else { return }
-            colorScheme = MousAppearance.colorScheme(from: raw)
+            if let raw = notification.object as? String {
+                theme = MousTheme.parse(raw)
+            } else if let next = notification.object as? MousTheme {
+                theme = next
+            }
         }
-        .preferredColorScheme(colorScheme)
-        .modifier(MousThemedChrome())
+        .preferredColorScheme(theme.isLight ? .light : .dark)
+        .modifier(MousThemedChrome(theme: theme))
         .padding(Self.shadowMargin)
         .contentShape(Rectangle())
         .onHover { onAppHover($0) }
@@ -97,18 +95,11 @@ struct MousPopup: View {
                     .onChange(of: proxy.size) { _, new in onSizeChange(new) }
             }
         }
-        .onExitCommand {
-            _ = onEscape()
-        }
         .task { await store.appear() }
         .onAppear {
             // Short, native-feeling entrance: fade + slight settle from the
             // anchor edge, no bounce. Reduce Motion gets a plain fade.
-            if reduceMotion {
-                withAnimation(.easeOut(duration: 0.15)) { appeared = true }
-            } else {
-                withAnimation(.easeOut(duration: 0.18)) { appeared = true }
-            }
+            withAnimation(MousMotion.spring(reduceMotion: reduceMotion)) { appeared = true }
         }
     }
 
@@ -120,7 +111,9 @@ struct MousPopup: View {
                 isRefreshing: store.isRefreshing,
                 statusMessage: store.statusMessage,
                 currencyCode: store.displayCurrencyCode,
-                hideBalance: store.hideBalance,
+                hideBalance: store.amountsConcealed,
+                onToggleHide: { store.toggleHideBalance() },
+                onPeek: { store.balancePeek = $0 },
                 onSpendHover: { inside in
                     guard store.hasLoadedDashboard else { return }
                     onSpendHover(inside)
@@ -148,40 +141,22 @@ struct MousPopup: View {
 
     private func openSettings() {
         onOpenSettings()
-        withAnimation(reduceMotion ? .easeOut(duration: 0.12) : .snappy(duration: 0.22)) {
+        withAnimation(MousMotion.spring(reduceMotion: reduceMotion)) {
             commandHints.showOptionsMenu = false
-            commandHints.showNotifications = false
             commandHints.showSettings = true
         }
     }
 
-    private func openNotifications() {
-        onOpenNotifications()
-        withAnimation(reduceMotion ? .easeOut(duration: 0.12) : .snappy(duration: 0.22)) {
-            commandHints.showOptionsMenu = false
-            commandHints.showSettings = false
-            commandHints.showNotifications = true
-        }
-    }
-
     private func closeOptionsMenu() {
-        withAnimation(.easeOut(duration: 0.12)) {
+        withAnimation(MousMotion.quick(reduceMotion: reduceMotion)) {
             commandHints.showOptionsMenu = false
         }
         NotificationCenter.default.post(name: .mousRestoreInputFocus, object: nil)
     }
 
     private func closeSettings() {
-        withAnimation(reduceMotion ? .easeOut(duration: 0.12) : .snappy(duration: 0.22)) {
+        withAnimation(MousMotion.spring(reduceMotion: reduceMotion)) {
             commandHints.showSettings = false
-        }
-        NotificationCenter.default.post(name: .mousRestoreInputFocus, object: nil)
-    }
-
-    private func closeNotifications() {
-        reportNotice.closeInbox()
-        withAnimation(reduceMotion ? .easeOut(duration: 0.12) : .snappy(duration: 0.22)) {
-            commandHints.showNotifications = false
         }
         NotificationCenter.default.post(name: .mousRestoreInputFocus, object: nil)
     }

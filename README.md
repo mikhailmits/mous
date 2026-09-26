@@ -40,50 +40,70 @@ You've got two shortcuts - <kbd>⌘</kbd> <kbd>M</kbd> and <kbd>⌘</kbd> <kbd>X
 
 ## For those who are interested - architecture
 
-A web server listens on a port and exposes an API with all the functionality: listing transactions, creating them, managing accounts, currencies, categories, and so on. The client — the macOS app — talks to that API, and that's how the figures end up on a simple page.
+The backend has been rewritten in Rust (`rust/`). Instead of an HTTP API, mous
+now exposes a **CLI** (`mou`) backed by a long-lived **daemon** (`mousd`). The
+daemon owns the SQLite books and all business logic; the CLI is just one
+front-end (a web or GUI front-end can talk to the same daemon later).
 
-The server is FastAPI with SQLite (`src/mous`) on `127.0.0.1:8000`. The client is a native Swift app (`macos/Mous`): a borderless popup that asks the API for data and renders it. The app does not store the books itself; it only talks to this local server.
+- **`mousd`** — the server. Listens on a **Unix domain socket** and speaks a
+  compact length-prefixed [`postcard`](https://docs.rs/postcard) binary
+  protocol (no HTTP, no JSON). It holds a single-instance lock, self-exits
+  after an idle timeout, and stores everything in SQLite (WAL).
+- **`mou`** — the client. On first use it **auto-spawns** `mousd` (double-fork
+  detach), so you never start a server yourself. It renders as a table
+  (default), `--json`, or `--yaml`.
+- **`mous-core`** — the domain logic and store, shared by the daemon.
+- **`mous-proto`** — the wire types + framing, shared by client and daemon.
+
+Transactions store their **native currency**; listings **display everything in
+the default currency** (EUR/USD/UAH stub FX). Values are signed: negative is an
+expense, positive is income, zero is not a transaction.
+
+The macOS app (`macos/Mous`) shells out to `mou --json` for the same books.
+Each call starts `mousd` if it is not already running. A dev build looks for
+`rust/target/release/mou` (then `debug`) from the working directory, or
+`MOU_BIN`. A bundled app uses the `mou` and `mousd` binaries beside the
+executable.
+
+The previous Python FastAPI service is kept under `src/mous` purely as the
+benchmark baseline.
 
 ## Run it
 
-Backend (Docker):
+Build the workspace, then use `mou` — the daemon starts on demand:
 
 ```sh
-docker compose up -d
+cargo build --release --manifest-path rust/Cargo.toml
+export PATH="$PWD/rust/target/release:$PATH"
+
+mou new -23.10 --name groceries --ctg food     # an expense (auto-creates 'food')
+mou new 110 --name salary --curr usd           # income in USD (auto-creates 'usd')
+mou new -9.99 --name netflix --recurring "0 0 1 * *"
+mou --all                                       # list, shown in the default currency
+mou --all --curr usd uah                        # filter by one or more currencies
+mou --all --since 2026-09-01 --until 2026-09-30 # filter by date
+mou --id 2 --edit-amount -30 --ctg dining       # edit a transaction
+mou -d --id 2                                    # delete a transaction
+
+mou cur --all                                    # currencies
+mou cur --set-default usd                         # switch the display currency
 ```
 
-App (macOS 14+, Swift toolchain):
-
-```sh
-uv run mous dev     # builds and launches the popup
-```
-
-Or without Docker, run the API directly:
-
-```sh
-uv run mous serve
-```
-
-## Accessing the API directly
-
-The app uses a local HTTP API at `http://127.0.0.1:8000`. Once the server is running, interactive docs are at `http://127.0.0.1:8000/docs`.
-
-```sh
-# add a category and a tagged expense
-curl -X POST 127.0.0.1:8000/categories -H 'Content-Type: application/json' \
-     -d '{"name": "food"}'
-curl -X POST 127.0.0.1:8000/transactions -H 'Content-Type: application/json' \
-     -d '{"name": "groceries", "value": -23.10, "currency_id": 1, "category_id": 1}'
-```
-
-Values are signed: negative is an expense, positive is income, zero is not a
-transaction.
+Output format: add `--json` or `--yaml` to any command.
 
 ## Development
 
 ```sh
-uv sync                                                  # python deps
-uv run mous serve                                        # API on :8000
-swift run --package-path macos/Mous MousCoreCheck        # swift checks
-swift build --package-path macos/Mous --product Mous     # build the app
+# Rust backend (the product)
+cargo build   --manifest-path rust/Cargo.toml
+cargo test    --manifest-path rust/Cargo.toml
+cargo clippy  --manifest-path rust/Cargo.toml --all-targets -- -D warnings
+
+# Benchmarks (Rust vs the Python baseline) -> /opt/cursor/artifacts
+uv sync                                # python baseline deps
+bash scripts/bench/run_bench.sh /tmp/bench-out
+python3 scripts/bench/summarize.py /tmp/bench-out/bench_raw.log
+
+# macOS app (shells out to mou)
+swift build --package-path macos/Mous --product Mous
 ```

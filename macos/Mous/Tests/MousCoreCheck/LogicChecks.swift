@@ -200,7 +200,8 @@ func fxCalcChecks() {
     Check.equal(FxCalcParser.kind(line: "10eur to usd", currencies: bag, fx: .stub), .ready)
     Check.equal(FxCalcParser.kind(line: "-50 coffee to go", currencies: bag, fx: .stub), .notCalc)
     Check.equal(FxCalcParser.kind(line: "10 gbp to eur", currencies: bag + [gbp], fx: .stub), .failed)
-    Check.equal(FxCalcParser.kind(line: "10 gbp to eur", currencies: bag, fx: .stub), .notCalc)
+    Check.equal(FxCalcParser.kind(line: "10 gbp to eur", currencies: bag, fx: .stub), .failed)
+    Check.equal(FxCalcParser.kind(line: "10 xyz to eur", currencies: bag, fx: .stub), .notCalc)
 
     Check.equal(
         FxCalcParser.apply(line: "-50 coffee to go", currencies: bag, fx: .stub),
@@ -224,8 +225,26 @@ func fxCalcChecks() {
     )
     Check.equal(
         FxCalcParser.apply(line: "10 gbp to eur", currencies: bag, fx: .stub),
-        .notCalc
+        .failed
     )
+
+    var cryptoBook = FXBook.stub
+    cryptoBook.set(base: "EUR", quote: "BTC", rate: 0.00002)
+    switch FxCalcParser.apply(line: "1 btc to eur", currencies: bag, fx: cryptoBook) {
+    case .converted(let got):
+        Check.equal(got, "50000eur")
+    default:
+        Check.fail("btc to eur")
+    }
+    switch FxCalcParser.apply(line: "100 eur to btc", currencies: bag, fx: cryptoBook) {
+    case .converted(let got):
+        Check.equal(got, "0.002btc")
+    default:
+        Check.fail("eur to btc")
+    }
+    Check.true(FxSymbols.exact("xbt") == "btc", "xbt aliases to btc")
+    Check.true(FxSymbols.exact("jpy") != nil, "iso fiat is recognized")
+    Check.true(FxSymbols.exact("xyz") == nil, "unknown ticker stays out")
 }
 
 func dashboardChecks() {
@@ -661,21 +680,16 @@ func configChecks() {
     }
     MousConfigFile.directoryOverride = dir
 
-    Check.equal(ReportCadence.classify("14 days"), .twoWeeks)
-    Check.equal(ReportCadence.classify("week"), .week)
-    Check.equal(ReportCadence.classify("2 weeks"), .twoWeeks)
-    Check.equal(ReportCadence.classify("month"), .month)
-    Check.equal(ReportCadence.classify("3 weeks"), .custom)
-    Check.true(ReportCadence.isValidPeriod("3 weeks"), "3 weeks is valid")
-    Check.true(ReportCadence.isValidPeriod("week"), "week is valid")
-    Check.true(!ReportCadence.isValidPeriod("whenever"), "whenever is invalid")
-    Check.true(!ReportCadence.isValidPeriod("0 days"), "0 days is invalid")
+    Check.equal(MousTheme.parse("system"), .lime)
+    Check.equal(MousTheme.parse("dark"), .lime)
+    Check.equal(MousTheme.parse("clay"), .clay)
+    Check.equal(MousTheme.parse("white"), .white)
+    Check.equal(MousTheme.parse("sea"), .sea)
 
     let first = MousConfigFile.ensure()
     Check.equal(first.host, "127.0.0.1")
     Check.equal(first.port, 8000)
-    Check.equal(first.reportPeriod, "14 days")
-    Check.equal(first.theme, "system")
+    Check.equal(first.theme, "lime")
     Check.equal(first.currency, "eur")
     Check.equal(MousCurrencyPref.eur.isoCode, "EUR")
     Check.equal(MousCurrencyPref.usd.isoCode, "USD")
@@ -685,8 +699,6 @@ func configChecks() {
     Check.equal(MousCurrencyPref.isoCode(for: "unknown"), "EUR")
     Check.equal(MousCurrencyPref.usd.englishName, "US Dollar")
     Check.equal(MousCurrencyPref.pref(for: "uah"), .uah)
-    Check.equal(first.notifyInApp, true)
-    Check.equal(first.notifyMacOS, true)
     Check.equal(first.hideBalance, false)
     Check.equal(first.hideBalanceStyle, "scramble")
     Check.equal(HideBalanceStyle.parse("veil"), .veil)
@@ -697,62 +709,99 @@ func configChecks() {
     Check.equal(MousCurrencyPref.uah.glyph, "₴")
     Check.equal(first.dev, false)
     Check.equal(first.databasePath, dir.appendingPathComponent("data.db").path)
+    assertPublicConfigKeys(at: MousConfigFile.configURL())
 
     var cfg = first
-    cfg.reportPeriod = "week"
-    cfg.theme = "dark"
+    cfg.theme = "clay"
     cfg.currency = "uah"
     cfg.dev = true
-    cfg.notifyInApp = false
-    cfg.notifyMacOS = false
     cfg.hideBalance = true
     cfg.hideBalanceStyle = "veil"
     MousConfigFile.save(cfg)
     let loaded = MousConfigFile.load()
-    Check.equal(loaded.reportPeriod, "week")
-    Check.equal(loaded.theme, "dark")
+    Check.equal(loaded.theme, "clay")
     Check.equal(loaded.currency, "uah")
     Check.equal(loaded.dev, true)
-    Check.equal(loaded.notifyInApp, false)
-    Check.equal(loaded.notifyMacOS, false)
     Check.equal(loaded.hideBalance, true)
     Check.equal(loaded.hideBalanceStyle, "veil")
+    assertPublicConfigKeys(at: MousConfigFile.configURL())
 
     let partial = dir.appendingPathComponent("config.json")
-    try? Data("{ \"host\": \"0.0.0.0\", \"port\": 9000 }\n".utf8).write(to: partial)
+    try? Data("{ \"host\": \"0.0.0.0\", \"port\": 9000, \"theme\": \"dark\" }\n".utf8).write(to: partial)
     let filled = MousConfigFile.ensure()
     Check.equal(filled.host, "0.0.0.0")
     Check.equal(filled.port, 9000)
-    Check.equal(filled.theme, "system")
-    Check.equal(filled.reportPeriod, "14 days")
-    Check.equal(filled.notifyInApp, true)
-    Check.equal(filled.notifyMacOS, true)
+    Check.equal(filled.theme, "lime")
     Check.equal(filled.hideBalance, false)
     Check.equal(filled.hideBalanceStyle, "scramble")
-    Check.equal(MousConfigFile.summaryReportURL(), dir.appendingPathComponent("summary_report.json"))
-
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-    let from = calendar.date(from: DateComponents(year: 2026, month: 9, day: 17))!
-    let nextTwoWeeks = ReportCadence.nextReportDate(period: "14 days", from: from, calendar: calendar)!
-    let twoParts = calendar.dateComponents([.year, .month, .day], from: nextTwoWeeks)
-    Check.equal(twoParts.year ?? 0, 2026)
-    Check.equal(twoParts.month ?? 0, 10)
-    Check.equal(twoParts.day ?? 0, 1)
-    let nextWeek = ReportCadence.nextReportDate(period: "week", from: from, calendar: calendar)!
-    let weekParts = calendar.dateComponents([.year, .month, .day], from: nextWeek)
-    Check.equal(weekParts.year ?? 0, 2026)
-    Check.equal(weekParts.month ?? 0, 9)
-    Check.equal(weekParts.day ?? 0, 24)
-    let nextMonth = ReportCadence.nextReportDate(period: "month", from: from, calendar: calendar)!
-    let monthParts = calendar.dateComponents([.year, .month, .day], from: nextMonth)
-    Check.equal(monthParts.month ?? 0, 10)
-    Check.equal(monthParts.day ?? 0, 17)
-    Check.true(ReportCadence.nextReportDate(period: "whenever", from: from, calendar: calendar) == nil, "invalid period has no next date")
+    assertPublicConfigKeys(at: MousConfigFile.configURL())
 
     try? Data("{ \"hide_balance_style\": \"nope\" }\n".utf8).write(to: partial)
     let unknownStyle = MousConfigFile.load()
     Check.equal(unknownStyle.hideBalanceStyle, "scramble")
+}
+
+/// `config.json` must expose the public keys and must not revive removed ones.
+func assertPublicConfigKeys(at url: URL) {
+    guard let data = try? Data(contentsOf: url),
+          let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else {
+        Check.fail("config.json unreadable at \(url.path)")
+        return
+    }
+    for key in [
+        "host", "port", "database_path", "dev", "theme", "currency",
+        "hide_balance", "hide_balance_style",
+    ] {
+        Check.true(obj[key] != nil, "config missing \(key)")
+    }
+    for key in ["jev_api_key", "notify_in_app", "notify_macos", "report_period"] {
+        Check.true(obj[key] == nil, "config must not contain \(key)")
+    }
+}
+
+func assistChecks() {
+    let eur = Currency(id: 1, symbol: "eur", name: "Euro", isDefault: true)
+    let usd = Currency(id: 2, symbol: "usd", name: "US Dollar", isDefault: false)
+    let uah = Currency(id: 3, symbol: "uah", name: "Hryvnia", isDefault: false)
+    let bag = [eur, usd, uah]
+
+    func expect(_ line: String, _ insert: String, _ label: String) {
+        guard let suggestion = InputAssist.suggest(line: line, currencies: bag, fx: .stub) else {
+            Check.fail("expected suggestion for \(line)")
+            return
+        }
+        Check.equal(suggestion.insert, insert, line)
+        Check.equal(suggestion.label, label, line)
+    }
+
+    expect("45+34", "79", "= 79")
+    expect("45 + 34", "79", "= 79")
+    expect("12*3", "36", "= 36")
+    expect("100/4", "25", "= 25")
+    expect("(2+3)*4", "20", "= 20")
+    expect("4 eur to uah", "160uah", "= 160 uah")
+    expect("-450 uah to eur", "-11.25eur", "= -11.25 eur")
+    Check.true(InputAssist.suggest(line: "-450 uah", currencies: bag, fx: .stub) == nil, "spend line is not a calc")
+    Check.true(InputAssist.suggest(line: "-450uah groceries", currencies: bag, fx: .stub) == nil, "glued spend is not a calc")
+    Check.true(InputAssist.suggest(line: "-450", currencies: bag, fx: .stub) == nil, "a lone amount is not a calc")
+
+    switch SpendingLineParser.parse(line: "-450 uah", currencies: bag) {
+    case .complete(let draft):
+        Check.equal(draft.currencySymbol, "uah")
+        Check.accuracy(draft.signedValue, -450, 1e-9)
+        let shown = MoneyDisplay.convert(draft.signedValue, from: "uah", to: "eur", using: .stub)
+        Check.accuracy(shown ?? 0, -11.25, 1e-9, "uah displays as eur")
+    default:
+        Check.fail("expected -450 uah to parse")
+    }
+    switch SpendingLineParser.parse(line: "-450uah", currencies: bag) {
+    case .complete(let draft):
+        Check.equal(draft.currencySymbol, "uah")
+        Check.accuracy(draft.signedValue, -450, 1e-9)
+    default:
+        Check.fail("expected -450uah to parse")
+    }
 }
 
 func balanceMaskChecks() {
@@ -772,179 +821,6 @@ func balanceMaskChecks() {
     Check.true(!BalanceMask.isVeil("?#*!??"))
     Check.equal(BalanceMask.make(style: .veil, length: 4), "••••")
     Check.true(BalanceMask.isMasked(BalanceMask.make(style: .scramble)))
-}
-
-func summaryReportChecks() {
-    Check.equal(SummaryReportCopy.readyMessage(period: "14 days"), "Your 2 week report is ready")
-    Check.equal(SummaryReportCopy.readyMessage(period: "week"), "Your week report is ready")
-    Check.equal(SummaryReportCopy.readyMessage(period: "month"), "Your month report is ready")
-    Check.equal(SummaryReportCopy.readyMessage(period: "3 weeks"), "Your 3 weeks report is ready")
-    Check.equal(SummaryReportCopy.readyMessage(period: ""), "Your report is ready")
-
-    let python = "2026-09-15T11:56:25.259245+00:00"
-    guard let parsed = SummaryReportTime.parse(python) else {
-        Check.fail("parse python isoformat \(python)")
-        return
-    }
-    let parts = Calendar(identifier: .gregorian)
-        .dateComponents(in: TimeZone(secondsFromGMT: 0)!, from: parsed)
-    Check.equal(parts.year ?? 0, 2026)
-    Check.equal(parts.month ?? 0, 9)
-    Check.equal(parts.day ?? 0, 15)
-    Check.equal(parts.hour ?? 0, 11)
-    Check.equal(parts.minute ?? 0, 56)
-
-    let json = """
-    {"captured_at":"2026-09-15T11:56:25.259245+00:00","period":"14 days","stdout":"summary\\n"}
-    """.data(using: .utf8)!
-    guard let file = SummaryReportFile.decode(json) else {
-        Check.fail("decode summary_report.json")
-        return
-    }
-    Check.equal(file.period, "14 days")
-    Check.true(file.stdout.contains("summary"), "stdout kept")
-
-    var gate = SummaryReportGate()
-    Check.equal(gate.consider(nil), .ignore)
-    Check.equal(gate.consider(file), .remember)
-    Check.equal(gate.consider(file), .ignore)
-
-    var later = file
-    later.capturedAt = file.capturedAt.addingTimeInterval(60)
-    guard case .notify(let noticed) = gate.consider(later) else {
-        Check.fail("expected notify on newer captured_at")
-        return
-    }
-    Check.equal(noticed.capturedAt, later.capturedAt)
-    Check.equal(gate.consider(later), .ignore)
-
-    Check.equal(SummaryReportCopy.inboxTitle(period: "14 days"), "2 week report")
-    Check.equal(SummaryReportCopy.inboxTitle(period: "week"), "Week report")
-    Check.equal(SummaryReportCopy.inboxTitle(period: "month"), "Month report")
-    Check.equal(SummaryReportCopy.inboxTitle(period: "3 weeks"), "3 weeks report")
-    Check.equal(SummaryReportCopy.inboxTitle(period: ""), "Report")
-
-    let sampleStdout = """
-    summary
-      2 Sep 2026 – 15 Sep 2026
-        currency = eur
-        n = 3
-        in = 2000 eur
-        out = 17.49 eur
-        saved = 1982.51 eur
-        top = [food]
-        runway = 1586.91
-        next_month_spent_predictions = 12.4929 eur
-
-        if you keep up you will spend money on:
-          Netflix = 12.99 eur
-          Total spent on subscriptions = 12.99 eur
-    """
-    guard let figures = SummaryReportFigures.parse(sampleStdout) else {
-        Check.fail("parse summary stdout")
-        return
-    }
-    Check.equal(figures.range, "2 Sep 2026 – 15 Sep 2026")
-    Check.equal(figures.currency, "eur")
-    Check.equal(figures.count, 3)
-    Check.accuracy(figures.income, 2000)
-    Check.accuracy(figures.expense, 17.49)
-    Check.accuracy(figures.saved, 1982.51)
-    Check.true(figures.formatSavedPercent().contains("99"), figures.formatSavedPercent())
-    Check.equal(figures.top, ["food"])
-    Check.accuracy(figures.runway ?? -1, 1586.91)
-    Check.equal(figures.formatRunway(1586.91), "1587 days")
-    Check.equal(figures.formatRunway(1), "1 day")
-    let usdFigures = figures.displayed(in: "USD", using: .stub)
-    Check.equal(usdFigures.currency, "USD")
-    Check.accuracy(usdFigures.income, 2200)
-    Check.accuracy(usdFigures.expense, 17.49 * 1.1)
-    Check.accuracy(usdFigures.saved, 1982.51 * 1.1)
-    Check.accuracy(usdFigures.nextMonth ?? -1, 12.4929 * 1.1)
-    let same = figures.displayed(in: "eur", using: .stub)
-    Check.accuracy(same.income, 2000)
-    Check.accuracy(figures.nextMonth ?? -1, 12.4929)
-
-    let missing = SummaryReportFigures.parse("not a summary\n")
-    Check.true(missing == nil, "reject non-summary stdout")
-    let noRunway = SummaryReportFigures.parse("""
-    summary
-      1 Sep 2026
-        currency = €
-        n = 0
-        in = 0 €
-        out = 0 €
-        saved = 0 €
-        top = []
-        runway = ...
-        next_month_spent_predictions = 0 €
-    """)
-    Check.true(noRunway?.runway == nil, "ellipsis runway is nil")
-    Check.equal(noRunway?.top ?? ["x"], [])
-    Check.true(noRunway?.formatSavedPercent().contains("0") == true, noRunway?.formatSavedPercent() ?? "")
-    Check.true(noRunway?.formatSavedPercent().contains("%") == true, noRunway?.formatSavedPercent() ?? "")
-
-    let overspend = SummaryReportFigures.parse("""
-    summary
-      1 Sep 2026
-        currency = €
-        n = 2
-        in = 200 €
-        out = 300 €
-        saved = -100 €
-        top = []
-        runway = ...
-        next_month_spent_predictions = 0 €
-    """)
-    Check.true(overspend?.formatSavedPercent().contains("%") == true, overspend?.formatSavedPercent() ?? "")
-    Check.true(overspend?.formatSavedPercent().contains("50") == true, overspend?.formatSavedPercent() ?? "")
-
-    var inbox: [ReportInboxItem] = []
-    let firstReport = SummaryReportFile(capturedAt: Date(timeIntervalSince1970: 1_000), period: "14 days", stdout: sampleStdout)
-    inbox = ReportInboxFile.ingesting(firstReport, unread: true, into: inbox)
-    Check.equal(inbox.count, 1)
-    Check.equal(inbox[0].read, false)
-    inbox = ReportInboxFile.ingesting(firstReport, unread: true, into: inbox)
-    Check.equal(inbox.count, 1)
-    var laterReport = firstReport
-    laterReport.capturedAt = firstReport.capturedAt.addingTimeInterval(60)
-    inbox = ReportInboxFile.ingesting(laterReport, unread: false, into: inbox)
-    Check.equal(inbox.count, 2)
-    Check.equal(inbox[0].capturedAt, laterReport.capturedAt)
-    Check.equal(inbox[0].read, true)
-    Check.equal(inbox[1].read, false)
-
-    var many: [ReportInboxItem] = []
-    for i in 0..<30 {
-        let file = SummaryReportFile(
-            capturedAt: Date(timeIntervalSince1970: TimeInterval(i + 1)),
-            period: "week",
-            stdout: "summary\n"
-        )
-        many = ReportInboxFile.ingesting(file, unread: true, into: many)
-    }
-    Check.equal(many.count, ReportInboxFile.maxItems)
-    Check.equal(many[0].capturedAt, Date(timeIntervalSince1970: 30))
-
-    let dir = FileManager.default.temporaryDirectory
-        .appendingPathComponent("mous-report-\(UUID().uuidString)", isDirectory: true)
-    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-    defer {
-        MousConfigFile.directoryOverride = nil
-        try? FileManager.default.removeItem(at: dir)
-    }
-    MousConfigFile.directoryOverride = dir
-    try? json.write(to: MousConfigFile.summaryReportURL())
-    let loaded = SummaryReportFile.load()
-    Check.true(loaded != nil, "load from config dir")
-    Check.equal(loaded?.period, "14 days")
-
-    ReportInboxFile.save(inbox)
-    let restored = ReportInboxFile.load()
-    Check.equal(restored.count, 2)
-    Check.equal(restored[0].period, "14 days")
-    Check.equal(restored[0].read, true)
-    Check.equal(MousConfigFile.reportInboxURL(), dir.appendingPathComponent("report_inbox.json"))
 }
 
 func updateVersionChecks() {

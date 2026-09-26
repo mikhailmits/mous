@@ -31,6 +31,9 @@ public final class AppStore {
     public private(set) var displayCurrencyCode: String
     /// Settings: scramble spent, left, history, and most-expensive amounts.
     public private(set) var hideBalance = false
+    /// True while the eye is held down. Amounts show through the dots.
+    public var balancePeek = false
+    public var amountsConcealed: Bool { hideBalance && !balancePeek }
 
     private var currencies: [Currency] = []
     private var currencyCodes: [Int: String] = [:]
@@ -96,42 +99,58 @@ public final class AppStore {
     public func reloadPreferences() async {
         applyDisplayCurrencyFromConfig()
         applyDisplayedFigures()
+        loadGeneration += 1
+        let generation = loadGeneration
         do {
             try await loadCurrenciesAndAccount()
+            guard generation == loadGeneration else { return }
             rememberCurrencyCodes()
-            if let mainAccount {
-                let loadedBalance = try await client.balance(accountID: mainAccount.id)
-                ledgerBalance = loadedBalance.amount
-                ledgerBalanceCode = loadedBalance.currency
-                    ?? currencies.first(where: { $0.isDefault })?.symbol
-                ledgerParts = loadedBalance.byCurrency.compactMap { part in
-                    guard let code = currencyCodes[part.currencyID] else { return nil }
-                    return CurrencyAmount(code: code, amount: part.amount)
-                }
-            }
+            guard generation == loadGeneration else { return }
             applyDisplayedFigures()
             reparse(clearFailed: false)
         } catch {
+            guard generation == loadGeneration else { return }
             reparse(clearFailed: false)
         }
     }
 
-    /// Tab / Enter: `{amount}{from} to {to}` becomes `{amount}{to}` and does not post.
+    public var assistSuggestion: InputAssist.Suggestion? {
+        InputAssist.suggest(line: text, currencies: currencies)
+    }
+
+    /// Return or a click on the calculator row. Does not post.
+    @discardableResult
+    public func acceptAssist() -> Bool {
+        guard let suggestion = assistSuggestion else { return false }
+        text = suggestion.insert
+        // `text` didSet already reparses and clears `returnFailed`.
+        return true
+    }
+
+    /// Tab / Enter: `{amount}{from} to {to}` or `45+34` becomes the result and does not post.
+    /// A failed FX calc still consumes Return so the line is never posted as a good.
     @discardableResult
     public func applyFxCalc() -> Bool {
+        if acceptAssist() { return true }
         switch FxCalcParser.apply(line: text, currencies: currencies) {
         case .notCalc:
             return false
         case .converted(let line):
-            returnFailed = false
             text = line
-            reparse(clearFailed: true)
             return true
         case .failed:
             returnFailed = true
             rejectTick += 1
             return true
         }
+    }
+
+    public func toggleHideBalance() {
+        var cfg = MousConfigFile.load()
+        cfg.hideBalance.toggle()
+        MousConfigFile.save(cfg)
+        hideBalance = cfg.hideBalance
+        if !hideBalance { balancePeek = false }
     }
 
     public func submit() async {
@@ -153,6 +172,7 @@ public final class AppStore {
                 } else {
                     statusMessage = APIError.transport.userMessage
                 }
+                return
             }
             if applyFxCalc() { return }
         }
@@ -167,7 +187,6 @@ public final class AppStore {
             posted = false
         }
         if posted {
-            isSubmitting = false
             await refresh(firstLoad: !hasLoadedDashboard)
         }
     }
@@ -192,20 +211,14 @@ public final class AppStore {
                 if currencies.isEmpty {
                     try await loadCurrenciesAndAccount()
                 }
-                guard let account = mainAccount else { throw APIError.missingMainAccount }
+                guard mainAccount != nil else { throw APIError.missingMainAccount }
                 let today = CivilDate.localToday(timeZone: timeZone, now: now())
-                let categoryID = await promoteRepeatCategory(named: draft.description)
                 _ = try await client.createTransaction(
                     description: draft.description,
                     value: draft.signedValue,
-                    currencyID: draft.currencyID,
-                    occurredOn: today,
-                    accountID: account.id,
-                    categoryID: categoryID
+                    currency: draft.currencySymbol,
+                    occurredOn: today
                 )
-                if let categoryID {
-                    await backfillCategory(categoryID, named: draft.description)
-                }
                 loadGeneration += 1
                 outgoingLine = submitted
                 if text == submitted {
@@ -249,25 +262,12 @@ public final class AppStore {
             do {
                 try await loadCurrenciesAndAccount()
                 guard generation == loadGeneration else { return }
-                guard let mainAccount else { throw APIError.missingMainAccount }
+                guard mainAccount != nil else { throw APIError.missingMainAccount }
                 let today = CivilDate.localToday(timeZone: timeZone, now: now())
                 let monthStart = CivilDate.localMonthStart(timeZone: timeZone, now: now())
-                async let balance = client.balance(accountID: mainAccount.id)
-                async let goods = client.transactions(accountID: mainAccount.id, from: monthStart, to: today)
-                async let categoryList = client.categories()
-                let goodsList = try await goods
-                let loadedCategories = try await categoryList
-                let loadedBalance = try await balance
+                let goodsList = try await client.transactions(from: monthStart, to: today)
                 rememberCurrencyCodes()
-                ledgerBalance = loadedBalance.amount
-                ledgerBalanceCode = loadedBalance.currency
-                    ?? currencies.first(where: { $0.isDefault })?.symbol
-                ledgerParts = loadedBalance.byCurrency.compactMap { part in
-                    guard let code = currencyCodes[part.currencyID] else { return nil }
-                    return CurrencyAmount(code: code, amount: part.amount)
-                }
                 guard generation == loadGeneration else { return }
-                categories = loadedCategories
                 monthTransactions = goodsList
                     .filter { $0.signedValue.isFinite }
                     .sorted {
@@ -324,17 +324,12 @@ public final class AppStore {
 
     private func loadCurrenciesAndAccount() async throws {
         currenciesLoading = currencies.isEmpty
-        async let accountsTask = client.accounts()
-        async let currenciesTask = client.currencies()
-        let accounts = try await accountsTask
-        currencies = try await currenciesTask
+        currencies = try await client.currencies()
         currenciesLoading = false
         applyDisplayCurrencyFromConfig()
+        await ensureQuoteCurrencies()
         await syncPreferredDefaultCurrency()
-        guard let preferred = Account.preferred(from: accounts) else {
-            throw APIError.missingMainAccount
-        }
-        mainAccount = preferred
+        mainAccount = Account(id: 0, name: "main")
     }
 
     public func displayedAmount(_ signedValue: Double, currencyID: Int) -> Double? {
@@ -378,60 +373,32 @@ public final class AppStore {
         }
     }
 
-    private func promoteRepeatCategory(named description: String) async -> Int? {
-        let display = RepeatCategory.displayName(description)
-        guard RepeatCategory.shouldPromote(description: display, among: monthTransactions) else {
-            return nil
-        }
-        if let id = RepeatCategory.existingID(matching: display, in: categories) {
-            return id
-        }
-        do {
-            if let remote = try await client.category(named: display) {
-                mergeCategory(remote)
-                return remote.id
-            }
-            let created = try await client.createCategory(name: display)
-            mergeCategory(created)
-            return created.id
-        } catch {
-            do {
-                let list = try await client.categories()
-                categories = list
-                return RepeatCategory.existingID(matching: display, in: list)
-            } catch {
-                return nil
-            }
-        }
-    }
-
-    private func backfillCategory(_ categoryID: Int, named description: String) async {
-        let key = RepeatCategory.normalized(description)
-        guard !key.isEmpty else { return }
-        let targets = monthTransactions.filter {
-            RepeatCategory.normalized($0.description) == key && $0.categoryID == nil
-        }
-        for tx in targets {
-            do {
-                _ = try await client.patchTransaction(id: tx.id, categoryID: categoryID)
-            } catch {
-                continue
-            }
-        }
-    }
-
-    private func mergeCategory(_ category: Category) {
-        if let index = categories.firstIndex(where: { $0.id == category.id }) {
-            categories[index] = category
-        } else {
-            categories.append(category)
-        }
-    }
-
     private func applyDisplayCurrencyFromConfig() {
         let cfg = MousConfigFile.load()
         displayCurrencyCode = MousCurrencyPref.isoCode(for: cfg.currency)
         hideBalance = cfg.hideBalance
+        if !hideBalance { balancePeek = false }
+    }
+
+    /// EUR, USD, and UAH have to exist or `-450 uah` is stored as euros with a note.
+    private func ensureQuoteCurrencies() async {
+        for pref in MousCurrencyPref.allCases {
+            if currencyMatching(pref.rawValue) != nil { continue }
+            do {
+                let created = try await client.createCurrency(
+                    symbol: pref.rawValue,
+                    name: pref.englishName,
+                    isDefault: false
+                )
+                if !currencies.contains(where: { $0.id == created.id }) {
+                    currencies.append(created)
+                }
+            } catch {
+                if let list = try? await client.currencies() {
+                    currencies = list
+                }
+            }
+        }
     }
 
     /// Make config `currency` the API default so unsuffixed quick-entry uses it.
@@ -441,7 +408,7 @@ public final class AppStore {
         do {
             if let existing = currencyMatching(symbol) {
                 if !existing.isDefault {
-                    adopt(try await client.setDefaultCurrency(id: existing.id))
+                    adopt(try await client.setDefaultCurrency(symbol: existing.symbol))
                 }
                 return
             }
@@ -452,13 +419,13 @@ public final class AppStore {
             )
             adopt(created)
             if !created.isDefault {
-                adopt(try await client.setDefaultCurrency(id: created.id))
+                adopt(try await client.setDefaultCurrency(symbol: created.symbol))
             }
         } catch {
             do {
                 currencies = try await client.currencies()
                 if let existing = currencyMatching(symbol), !existing.isDefault {
-                    adopt(try await client.setDefaultCurrency(id: existing.id))
+                    adopt(try await client.setDefaultCurrency(symbol: existing.symbol))
                 }
             } catch {
                 return

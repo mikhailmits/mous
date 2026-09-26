@@ -17,19 +17,19 @@ APP_NAME = "mous"
 
 _DEFAULT_HOST = "127.0.0.1"
 _DEFAULT_PORT = 8000
-_DEFAULT_REPORT_PERIOD = "14 days"
-_DEFAULT_THEME = "system"
+_DEFAULT_THEME = "lime"
 _DEFAULT_CURRENCY = "eur"
 _DEFAULT_HIDE_BALANCE_STYLE = "scramble"
-_THEMES = frozenset({"system", "light", "dark"})
+_LEGACY_THEMES = frozenset({"system", "light", "dark"})
+_THEMES = frozenset({"lime", "leaf", "pale", "mint", "sea", "clay", "white"})
 _HIDE_BALANCE_STYLES = frozenset({"scramble", "veil"})
 _REQUIRED_KEYS = (
+    "host",
+    "port",
+    "database_path",
     "dev",
-    "report_period",
     "theme",
     "currency",
-    "notify_in_app",
-    "notify_macos",
     "hide_balance",
     "hide_balance_style",
 )
@@ -40,11 +40,8 @@ class MousConfig(TypedDict):
     port: int
     database_path: str
     dev: bool
-    report_period: str
     theme: str
     currency: str
-    notify_in_app: bool
-    notify_macos: bool
     hide_balance: bool
     hide_balance_style: str
 
@@ -95,14 +92,32 @@ def default_config() -> MousConfig:
         "port": _DEFAULT_PORT,
         "database_path": str(default_database_path()),
         "dev": False,
-        "report_period": _DEFAULT_REPORT_PERIOD,
         "theme": _DEFAULT_THEME,
         "currency": _DEFAULT_CURRENCY,
-        "notify_in_app": True,
-        "notify_macos": True,
         "hide_balance": False,
         "hide_balance_style": _DEFAULT_HIDE_BALANCE_STYLE,
     }
+
+
+def _parse_port(value: object) -> int | None:
+    """Accept int, int-like float, or digit string. Reject bools and out-of-range."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        port = value
+    elif isinstance(value, float) and value.is_integer():
+        port = int(value)
+    elif isinstance(value, str) and value.strip().isdigit():
+        port = int(value.strip())
+    else:
+        return None
+    if 1 <= port <= 65535:
+        return port
+    return None
+
+
+def _missing_required(raw: dict) -> bool:
+    return any(key not in raw or raw[key] is None for key in _REQUIRED_KEYS)
 
 
 def load_config() -> MousConfig:
@@ -118,29 +133,26 @@ def load_config() -> MousConfig:
     if not isinstance(raw, dict):
         return cfg
     host = raw.get("host")
-    if isinstance(host, str) and host:
-        cfg["host"] = host
-    port = raw.get("port")
-    if isinstance(port, int) and not isinstance(port, bool) and 1 <= port <= 65535:
+    if isinstance(host, str) and host.strip():
+        cfg["host"] = host.strip()
+    port = _parse_port(raw.get("port"))
+    if port is not None:
         cfg["port"] = port
     db = raw.get("database_path")
-    if isinstance(db, str) and db:
-        cfg["database_path"] = db
+    if isinstance(db, str) and db.strip():
+        cfg["database_path"] = db.strip()
     if isinstance(raw.get("dev"), bool):
         cfg["dev"] = raw["dev"]
-    period = raw.get("report_period")
-    if isinstance(period, str) and period.strip():
-        cfg["report_period"] = " ".join(period.split())
     theme = raw.get("theme")
-    if isinstance(theme, str) and theme.strip().lower() in _THEMES:
-        cfg["theme"] = theme.strip().lower()
+    if isinstance(theme, str) and theme.strip():
+        normalized = theme.strip().lower()
+        if normalized in _LEGACY_THEMES:
+            cfg["theme"] = _DEFAULT_THEME
+        elif normalized in _THEMES:
+            cfg["theme"] = normalized
     currency = raw.get("currency")
     if isinstance(currency, str) and currency.strip():
         cfg["currency"] = currency.strip().lower()
-    if isinstance(raw.get("notify_in_app"), bool):
-        cfg["notify_in_app"] = raw["notify_in_app"]
-    if isinstance(raw.get("notify_macos"), bool):
-        cfg["notify_macos"] = raw["notify_macos"]
     if isinstance(raw.get("hide_balance"), bool):
         cfg["hide_balance"] = raw["hide_balance"]
     style = raw.get("hide_balance_style")
@@ -158,8 +170,7 @@ def save_config(cfg: MousConfig) -> None:
 def ensure_config() -> MousConfig:
     """Create config.json with defaults if it does not exist.
 
-    If the file exists but is missing `dev`, `report_period`, `theme`, `currency`,
-    notify flags, `hide_balance`, or `hide_balance_style`, write the merged
+    If the file exists but is missing required keys, write the merged
     defaults so those keys are visible without clobbering host / port /
     database_path.
     """
@@ -173,7 +184,7 @@ def ensure_config() -> MousConfig:
     except (OSError, json.JSONDecodeError):
         raw = {}
     cfg = load_config()
-    if not isinstance(raw, dict) or any(key not in raw for key in _REQUIRED_KEYS):
+    if not isinstance(raw, dict) or _missing_required(raw):
         save_config(cfg)
     return cfg
 
@@ -204,8 +215,3 @@ def api_port() -> int:
         except ValueError:
             pass
     return load_config()["port"]
-
-
-def report_period() -> str:
-    """How often to capture `mous summary`, and the window that command covers."""
-    return load_config()["report_period"]

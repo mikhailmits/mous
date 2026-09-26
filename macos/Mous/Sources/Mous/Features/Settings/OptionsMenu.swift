@@ -3,34 +3,26 @@ import SwiftUI
 
 struct OptionsMenuButton: View {
     @Binding var isOpen: Bool
-    var unreadCount: Int = 0
     var onSettings: () -> Void
-    var onNotifications: () -> Void
     var showCommandHints: Bool = false
     var reduceMotion: Bool
     var dimmed: Bool = false
     @State private var hoveringButton = false
 
     var body: some View {
-        VStack(alignment: .trailing, spacing: 8) {
+        VStack(alignment: .trailing, spacing: 6) {
             trigger
                 .opacity(dimmed ? 0.4 : 1)
 
             if isOpen {
                 OptionsMenuList(
-                    unreadCount: unreadCount,
                     showCommandHints: showCommandHints,
                     reduceMotion: reduceMotion,
                     onSettings: {
                         withAnimation(closeMotion) { isOpen = false }
                         onSettings()
-                    },
-                    onNotifications: {
-                        withAnimation(closeMotion) { isOpen = false }
-                        onNotifications()
                     }
                 )
-                .padding(.top, 44)
                 .transition(
                     reduceMotion
                         ? .opacity
@@ -83,8 +75,8 @@ struct OptionsMenuButton: View {
             .accessibilityElement(children: .ignore)
             .accessibilityAddTraits(.isButton)
             .accessibilityAddTraits(isOpen ? .isSelected : [])
-            .accessibilityLabel(unreadCount > 0 ? "Options, \(unreadCount) unread" : "Options")
-            .accessibilityHint("Command O opens or closes this menu. Command S opens Settings. Command N opens Notifications.")
+            .accessibilityLabel("Options")
+            .accessibilityHint("Command O opens or closes this menu. Command S opens Settings.")
             .accessibilityAction(.default) {
                 isOpen.toggle()
                 NotificationCenter.default.post(name: .mousRestoreInputFocus, object: nil)
@@ -92,11 +84,11 @@ struct OptionsMenuButton: View {
     }
 
     private var openMotion: Animation {
-        reduceMotion ? .easeOut(duration: 0.12) : .snappy(duration: 0.22)
+        MousMotion.spring(reduceMotion: reduceMotion)
     }
 
     private var closeMotion: Animation {
-        .easeOut(duration: 0.12)
+        MousMotion.quick(reduceMotion: reduceMotion)
     }
 }
 
@@ -111,11 +103,9 @@ struct OptionsMenuDismissHit: View {
 }
 
 private struct OptionsMenuList: View {
-    var unreadCount: Int
     var showCommandHints: Bool
     var reduceMotion: Bool
     var onSettings: () -> Void
-    var onNotifications: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -126,15 +116,6 @@ private struct OptionsMenuList: View {
                 showShortcut: showCommandHints,
                 reduceMotion: reduceMotion,
                 action: onSettings
-            )
-            OptionsMenuRow(
-                icon: "bell",
-                title: "Notifications",
-                shortcut: "n",
-                unread: unreadCount > 0,
-                showShortcut: showCommandHints,
-                reduceMotion: reduceMotion,
-                action: onNotifications
             )
         }
         .padding(6)
@@ -173,6 +154,7 @@ private struct OptionsMenuRow: View {
     var reduceMotion: Bool
     var action: () -> Void
     @State private var hovering = false
+    @Environment(\.mousAccent) private var mousAccent
 
     var body: some View {
         HStack(spacing: 10) {
@@ -189,8 +171,8 @@ private struct OptionsMenuRow: View {
                 .foregroundStyle(.primary)
             if unread {
                 Circle()
-                    .fill(Color.orange)
-                    .frame(width: 8, height: 8)
+                    .fill(mousAccent)
+                    .frame(width: 7, height: 7)
                     .accessibilityHidden(true)
             }
             Spacer(minLength: 8)

@@ -90,26 +90,54 @@ def isolated_database(directory: Path) -> Path:
     return path
 
 
+REQUIRED_CONFIG_KEYS = (
+    "host",
+    "port",
+    "database_path",
+    "dev",
+    "theme",
+    "currency",
+    "hide_balance",
+    "hide_balance_style",
+)
+FORBIDDEN_CONFIG_KEYS = (
+    "jev_api_key",
+    "notify_in_app",
+    "notify_macos",
+    "report_period",
+)
+
+
 def default_e2e_config(directory: Path) -> dict:
     return {
         "host": "127.0.0.1",
         "port": E2E_PORT,
         "database_path": str(directory / "data.db"),
         "dev": True,
-        "report_period": "14 days",
-        "theme": "dark",
+        "theme": "lime",
         "currency": "eur",
-        "notify_in_app": True,
-        "notify_macos": False,
         "hide_balance": False,
         "hide_balance_style": "scramble",
     }
+
+
+def assert_config_shape(cfg: dict, *, allow_missing_style: bool = False) -> None:
+    required = REQUIRED_CONFIG_KEYS
+    if allow_missing_style:
+        required = tuple(k for k in required if k != "hide_balance_style")
+    missing = [key for key in required if key not in cfg]
+    if missing:
+        raise Failed(f"config missing keys {missing}")
+    forbidden = [key for key in FORBIDDEN_CONFIG_KEYS if key in cfg]
+    if forbidden:
+        raise Failed(f"config has removed keys {forbidden}")
 
 
 def write_config(directory: Path, **overrides: object) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
     cfg = default_e2e_config(directory)
     cfg.update(overrides)
+    assert_config_shape(cfg)
     path = directory / "config.json"
     path.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
     isolated_database(directory)
@@ -121,6 +149,7 @@ def read_config(directory: Path) -> dict:
 
 
 def write_config_dict(directory: Path, cfg: dict) -> None:
+    assert_config_shape(cfg, allow_missing_style="hide_balance_style" not in cfg)
     (directory / "config.json").write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
 
 
@@ -249,18 +278,3 @@ def mous_cli(env: dict[str, str], args: list[str], *, check: bool = False) -> su
         text=True,
         check=check,
     )
-
-
-def summary_money(stdout: str, key: str) -> float | None:
-    prefix = f"    {key} ="
-    for line in stdout.splitlines():
-        if not line.startswith(prefix):
-            continue
-        token = line.split("=", 1)[1].strip().split()
-        if not token:
-            return None
-        try:
-            return float(token[0])
-        except ValueError:
-            return None
-    return None

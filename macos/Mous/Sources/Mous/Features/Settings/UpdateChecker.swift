@@ -27,17 +27,43 @@ extension UpdateChecker {
     }
 
     static func checkLatest(installed: String = installedVersion()) async -> Outcome {
-        guard GitHubUpdate.latestAPIURL.scheme?.lowercased() == "https" else { return .failed }
-        var request = URLRequest(url: GitHubUpdate.latestAPIURL)
-        request.timeoutInterval = 8
+        guard let apiURL = GitHubUpdate.latestAPIURL,
+              apiURL.scheme?.lowercased() == "https"
+        else {
+            return .failed
+        }
+        var request = URLRequest(url: apiURL)
+        request.timeoutInterval = GitHubUpdate.requestTimeout
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("Mous/\(installed) (https://github.com/mikhailmits/mous)", forHTTPHeaderField: "User-Agent")
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+
+        return await withTaskGroup(of: Outcome?.self) { group in
+            group.addTask {
+                await Self.fetchLatest(request: request, installed: installed)
+            }
+            group.addTask {
+                let nanos = UInt64((GitHubUpdate.requestTimeout + 1) * 1_000_000_000)
+                try? await Task.sleep(nanoseconds: nanos)
+                return Task.isCancelled ? nil : .failed
+            }
+            var outcome: Outcome = .failed
+            for await result in group {
+                guard let result else { continue }
+                outcome = result
+                group.cancelAll()
+                break
+            }
+            return outcome
+        }
+    }
+
+    private static func fetchLatest(request: URLRequest, installed: String) async -> Outcome {
         do {
             let (data, response) = try await GitHubUpdate.session.data(for: request)
             guard let http = response as? HTTPURLResponse,
                   (200..<300).contains(http.statusCode),
-                  response.url?.scheme?.lowercased() == "https",
+                  Self.isTrustedGitHubURL(response.url),
                   let release = parseRelease(data: data)
             else {
                 return .failed
@@ -54,7 +80,9 @@ extension UpdateChecker {
     private static func release(from payload: LatestPayload) -> Release? {
         let tag = payload.tagName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !tag.isEmpty else { return nil }
-        let htmlURL = httpsURL(payload.htmlURL) ?? GitHubUpdate.releasesPageURL
+        guard let htmlURL = httpsURL(payload.htmlURL) ?? GitHubUpdate.releasesPageURL else {
+            return nil
+        }
         let dmgURL = payload.assets
             .first { $0.name.lowercased().hasSuffix(".dmg") }
             .flatMap { httpsURL($0.browserDownloadURL) }
@@ -66,9 +94,19 @@ extension UpdateChecker {
         )
     }
 
-    private static func httpsURL(_ raw: String) -> URL? {
-        guard let url = URL(string: raw), url.scheme?.lowercased() == "https" else { return nil }
+    /// Only https GitHub hosts — never follow redirects or assets onto arbitrary download domains.
+    static func httpsURL(_ raw: String) -> URL? {
+        guard let url = URL(string: raw), isTrustedGitHubURL(url) else { return nil }
         return url
+    }
+
+    static func isTrustedGitHubURL(_ url: URL?) -> Bool {
+        guard let url, url.scheme?.lowercased() == "https" else { return false }
+        let host = (url.host ?? "").lowercased()
+        return host == "github.com"
+            || host.hasSuffix(".github.com")
+            || host == "githubusercontent.com"
+            || host.hasSuffix(".githubusercontent.com")
     }
 
     private struct LatestPayload: Decodable {
@@ -102,12 +140,13 @@ extension UpdateChecker {
 }
 
 private enum GitHubUpdate {
-    static let latestAPIURL = URL(string: "https://api.github.com/repos/mikhailmits/mous/releases/latest")!
-    static let releasesPageURL = URL(string: "https://github.com/mikhailmits/mous/releases")!
+    static let requestTimeout: TimeInterval = 8
+    static let latestAPIURL = URL(string: "https://api.github.com/repos/mikhailmits/mous/releases/latest")
+    static let releasesPageURL = URL(string: "https://github.com/mikhailmits/mous/releases")
     static let session: URLSession = {
         let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 8
-        config.timeoutIntervalForResource = 8
+        config.timeoutIntervalForRequest = requestTimeout
+        config.timeoutIntervalForResource = requestTimeout
         config.waitsForConnectivity = false
         config.httpShouldSetCookies = false
         config.httpCookieAcceptPolicy = .never
@@ -121,6 +160,7 @@ struct UpdatesSettingsField: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var status: Status = .idle
     @State private var release: UpdateChecker.Release?
+    @State private var checkTask: Task<Void, Never>?
 
     var body: some View {
         VStack(spacing: 8) {
@@ -147,8 +187,12 @@ struct UpdatesSettingsField: View {
                 .transition(.opacity)
             }
         }
-        .animation(reduceMotion ? .easeOut(duration: 0.12) : .snappy(duration: 0.22), value: showsUpdate)
-        .animation(reduceMotion ? .easeOut(duration: 0.12) : .snappy(duration: 0.22), value: status)
+        .animation(MousMotion.quick(reduceMotion: reduceMotion), value: showsUpdate)
+        .animation(MousMotion.quick(reduceMotion: reduceMotion), value: status)
+        .onDisappear {
+            checkTask?.cancel()
+            checkTask = nil
+        }
     }
 
     private var showsUpdate: Bool {
@@ -204,8 +248,10 @@ struct UpdatesSettingsField: View {
         guard status != .checking else { return }
         status = .checking
         let installed = UpdateChecker.installedVersion()
-        Task {
+        checkTask?.cancel()
+        checkTask = Task { @MainActor in
             let outcome = await UpdateChecker.checkLatest(installed: installed)
+            guard !Task.isCancelled else { return }
             switch outcome {
             case .upToDate:
                 release = nil
@@ -221,7 +267,7 @@ struct UpdatesSettingsField: View {
     }
 
     private func open(_ url: URL) {
-        guard url.scheme?.lowercased() == "https" else { return }
+        guard UpdateChecker.isTrustedGitHubURL(url) else { return }
         NSWorkspace.shared.open(url)
     }
 

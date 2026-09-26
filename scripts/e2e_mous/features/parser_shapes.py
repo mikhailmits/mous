@@ -60,10 +60,10 @@ def run_ui(pid: int, notes: list[str]) -> None:
 
     expect(_keys(pid, "a", command=True), "select entry for spaced income")
     _keys(pid, "delete")
-    time.sleep(0.15)
+    time.sleep(0.05)
     before = _hii_count(10, symbol)
     expect(_keys(pid, "+ 10 hii"), "type spaced + 10 hii")
-    time.sleep(0.2)
+    time.sleep(0.08)
     expect(_keys(pid, "return"), "submit spaced income")
     expect(
         _wait_hii(10, symbol, before + 1),
@@ -73,10 +73,10 @@ def run_ui(pid: int, notes: list[str]) -> None:
 
     expect(_keys(pid, "a", command=True), "select entry for glued income")
     _keys(pid, "delete")
-    time.sleep(0.15)
+    time.sleep(0.05)
     before = _hii_count(10, symbol)
     expect(_keys(pid, "+10hii"), "type glued +10hii")
-    time.sleep(0.2)
+    time.sleep(0.08)
     expect(_keys(pid, "return"), "submit glued income")
     expect(
         _wait_hii(10, symbol, before + 1),

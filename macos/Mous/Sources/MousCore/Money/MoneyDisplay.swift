@@ -17,10 +17,11 @@ public struct FXBook: Equatable, Sendable {
     /// Pivot used when a ledger bucket has no currency of its own.
     public static let pivotCode = "EUR"
 
-    private var rates: [String: Double]
+    /// Units of each code per one EUR. Cross rates are one division, not a stored inverse.
+    private var perPivot: [String: Double]
 
     public init() {
-        rates = [:]
+        perPivot = [:]
     }
 
     /// `rate` is quote units per one base unit (`EUR`→`USD` 1.1 means $1.10 per €1).
@@ -29,26 +30,37 @@ public struct FXBook: Equatable, Sendable {
         let src = Self.normalized(base)
         let dst = Self.normalized(quote)
         guard src != dst else { return }
-        rates[Self.key(src, dst)] = rate
-        rates[Self.key(dst, src)] = 1 / rate
+        if src == Self.pivotCode {
+            perPivot[dst] = rate
+            return
+        }
+        if dst == Self.pivotCode {
+            let inverse = 1 / rate
+            if inverse.isFinite, inverse > 0 { perPivot[src] = inverse }
+            return
+        }
+        if let srcPer = perPivot[src] {
+            let next = srcPer * rate
+            if next.isFinite, next > 0 { perPivot[dst] = next }
+            return
+        }
+        if let dstPer = perPivot[dst] {
+            let next = dstPer / rate
+            if next.isFinite, next > 0 { perPivot[src] = next }
+        }
     }
 
     /// Quote units of `to` per one `from`. Same currency is 1. Missing pair is nil.
     public func quote(from: String, to: String) -> Double? {
         let src = Self.normalized(from)
         let dst = Self.normalized(to)
+        guard !src.isEmpty, !dst.isEmpty else { return nil }
         if src == dst { return 1 }
-        if let rate = rates[Self.key(src, dst)], rate.isFinite, rate > 0 {
-            return rate
-        }
-        if src != "EUR", dst != "EUR",
-           let toEUR = rates[Self.key(src, "EUR")],
-           let fromEUR = rates[Self.key("EUR", dst)]
-        {
-            let crossed = toEUR * fromEUR
-            return crossed.isFinite && crossed > 0 ? crossed : nil
-        }
-        return nil
+        let srcPer = src == Self.pivotCode ? 1.0 : perPivot[src]
+        let dstPer = dst == Self.pivotCode ? 1.0 : perPivot[dst]
+        guard let srcPer, let dstPer, srcPer > 0, dstPer > 0 else { return nil }
+        let rate = dstPer / srcPer
+        return rate.isFinite && rate > 0 ? rate : nil
     }
 
     public func convert(_ amount: Double, from: String, to: String) -> Double? {
@@ -57,19 +69,15 @@ public struct FXBook: Equatable, Sendable {
         return converted.isFinite ? converted : nil
     }
 
-    public var isEmpty: Bool { rates.isEmpty }
+    public var isEmpty: Bool { perPivot.isEmpty }
 
     private static func normalized(_ code: String) -> String {
         code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
     }
-
-    private static func key(_ a: String, _ b: String) -> String {
-        "\(a)|\(b)"
-    }
 }
 
-/// Display-currency conversion. The app installs `FXBook.stub` at launch;
-/// tests can swap `book` for `.identity`.
+/// Display-currency conversion. Headless keeps `FXBook.stub`; the live app
+/// refreshes `book` in the background via `FxRateFeed`.
 public enum MoneyDisplay {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var stored = FXBook.identity

@@ -32,6 +32,9 @@ struct AlwaysFocusedLineField: NSViewRepresentable {
         field.cell?.wraps = false
         field.cell?.isScrollable = true
         field.cell?.usesSingleLineMode = true
+        // Ending editing by clicking away must not fire the cell action
+        // (which would look like a second Return / post).
+        field.cell?.sendsActionOnEndEditing = false
         field.refusesFirstResponder = false
         field.setAccessibilityLabel("New transaction")
         field.setAccessibilityIdentifier("New transaction")
@@ -83,6 +86,9 @@ struct AlwaysFocusedLineField: NSViewRepresentable {
         var onTab: () -> Void
         weak var field: StickyTextField?
         private var observers: [NSObjectProtocol] = []
+        /// Coalesces insertNewline + insertLineBreak (or key-repeat in the
+        /// same turn) so one Return cannot accept assist and then post.
+        private var commandLocked = false
 
         init(text: Binding<String>, onSubmit: @escaping () -> Void, onTab: @escaping () -> Void) {
             self.text = text
@@ -127,20 +133,31 @@ struct AlwaysFocusedLineField: NSViewRepresentable {
                 || commandSelector == #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:))
                 || commandSelector == #selector(NSResponder.insertLineBreak(_:))
             {
-                onSubmit()
+                runCommandOnce(onSubmit)
                 return true
             }
             if commandSelector == #selector(NSResponder.insertTab(_:))
                 || commandSelector == #selector(NSResponder.insertBacktab(_:))
                 || commandSelector == #selector(NSResponder.insertTabIgnoringFieldEditor(_:))
             {
-                onTab()
+                runCommandOnce(onTab)
                 return true
             }
             return false
         }
 
+        private func runCommandOnce(_ action: () -> Void) {
+            guard !commandLocked else { return }
+            commandLocked = true
+            action()
+            DispatchQueue.main.async { [weak self] in
+                self?.commandLocked = false
+            }
+        }
+
         func controlTextDidEndEditing(_ obj: Notification) {
+            // Clicking the calculator row resigns the field; reclaim without
+            // treating end-editing as a submit (sendsActionOnEndEditing is off).
             DispatchQueue.main.async { [weak self] in
                 self?.claimFocusIfNeeded()
             }

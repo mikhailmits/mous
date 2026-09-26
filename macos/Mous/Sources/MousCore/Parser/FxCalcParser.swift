@@ -47,29 +47,32 @@ public enum FxCalcParser {
         let left = trimmed[..<split.lowerBound].trimmingCharacters(in: .whitespaces)
         let right = trimmed[split.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
         guard !left.isEmpty, !right.isEmpty else { return .notCalc }
-        guard right.allSatisfy(\.isLetter) else { return .notCalc }
-        guard let target = matchSymbol(right, currencies: currencies) else { return .notCalc }
-        guard let parsed = parseLeft(Substring(left), currencies: currencies) else { return .notCalc }
+        guard FxSymbols.isTicker(String(right)), let target = FxSymbols.exact(String(right)) else {
+            return .notCalc
+        }
+        guard let parsed = parseLeft(Substring(left)) else { return .notCalc }
 
         let converted = MoneyDisplay.convert(
             parsed.magnitude,
-            from: parsed.source.symbol,
-            to: target.symbol,
+            from: parsed.source,
+            to: target,
             using: fx
         )
         guard let converted, converted.isFinite else { return .failed }
         let magnitude = abs(converted)
-        guard let amount = formatMagnitude(magnitude) else { return .failed }
-        return .converted("\(parsed.signPrefix)\(amount)\(target.symbol.lowercased())")
+        guard let amount = formatMagnitude(magnitude, places: FxSymbols.fractionDigits(target)) else {
+            return .failed
+        }
+        return .converted("\(parsed.signPrefix)\(amount)\(target)")
     }
 
     private struct Left {
         var signPrefix: String
         var magnitude: Double
-        var source: Currency
+        var source: String
     }
 
-    private static func parseLeft(_ left: Substring, currencies: [Currency]) -> Left? {
+    private static func parseLeft(_ left: Substring) -> Left? {
         var rest = left
         var signPrefix = ""
         if let first = rest.first {
@@ -88,7 +91,9 @@ public enum FxCalcParser {
         if afterAmount.first?.isWhitespace == true {
             afterAmount = afterAmount.drop(while: { $0.isWhitespace })
         }
-        guard let source = matchSymbol(afterAmount, currencies: currencies) else { return nil }
+        guard FxSymbols.isTicker(String(afterAmount)), let source = FxSymbols.exact(String(afterAmount)) else {
+            return nil
+        }
         return Left(signPrefix: signPrefix, magnitude: scanned.magnitude, source: source)
     }
 
@@ -114,7 +119,7 @@ public enum FxCalcParser {
             index = input.index(after: index)
             while index < end, input[index] >= "0", input[index] <= "9" {
                 fraction += 1
-                if fraction > 2 { return nil }
+                if fraction > 8 { return nil }
                 index = input.index(after: index)
             }
             if fraction == 0 { return nil }
@@ -126,28 +131,34 @@ public enum FxCalcParser {
         return (magnitude, input[index...])
     }
 
-    private static func matchSymbol<S: StringProtocol>(_ raw: S, currencies: [Currency]) -> Currency? {
-        let lower = raw.lowercased()
-        guard !lower.isEmpty else { return nil }
-        let sorted = currencies.sorted { $0.symbol.count > $1.symbol.count }
-        for currency in sorted {
-            if lower == currency.symbol.lowercased() {
-                return currency
-            }
+    /// Always uses `.` so the converted insert re-parses as a spend amount in every locale.
+    /// `places` is the currency's minor unit (0, 2, 3) or 8 for crypto.
+    private static func formatMagnitude(_ value: Double, places: Int) -> String? {
+        guard value > 0, value.isFinite, (0...8).contains(places) else { return nil }
+        if places == 0 {
+            let whole = value.rounded()
+            guard whole > 0, whole <= Double(Int.max), let total = Int(exactly: whole) else { return nil }
+            return String(total)
         }
-        return nil
-    }
-
-    private static func formatMagnitude(_ value: Double) -> String? {
-        let cents = (value * 100).rounded()
-        guard cents > 0, cents.isFinite else { return nil }
-        let rounded = cents / 100
-        if cents.truncatingRemainder(dividingBy: 100) == 0 {
-            return String(Int(rounded))
+        var scale = 1
+        for _ in 0..<places { scale *= 10 }
+        let units = (value * Double(scale)).rounded()
+        guard units > 0, units.isFinite, units <= Double(Int.max), let total = Int(exactly: units) else {
+            return nil
         }
-        if cents.truncatingRemainder(dividingBy: 10) == 0 {
-            return String(format: "%.1f", rounded)
+        let whole = total / scale
+        var frac = total % scale
+        var digits = places
+        while digits > 0, frac % 10 == 0 {
+            frac /= 10
+            digits -= 1
         }
-        return String(format: "%.2f", rounded)
+        if digits == 0 { return String(whole) }
+        let fracText = String(frac)
+        let pad = digits - fracText.count
+        if pad > 0 {
+            return "\(whole)." + String(repeating: "0", count: pad) + fracText
+        }
+        return "\(whole).\(fracText)"
     }
 }

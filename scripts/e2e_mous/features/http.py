@@ -9,9 +9,7 @@ from e2e_mous.harness import (
     API_SPEC_PATHS,
     expect,
     fetch_bytes,
-    mous_cli,
     request,
-    summary_money,
     unix_midnight,
 )
 
@@ -45,17 +43,14 @@ def run(env: dict[str, str]) -> None:
 
     currencies = request("GET", "/currencies")
     expect(currencies and any(c["symbol"] == "eur" for c in currencies["items"]), "missing eur")
-    eur_id = next(c["id"] for c in currencies["items"] if c["symbol"] == "eur")
+    by_symbol_row = {c["symbol"]: c for c in currencies["items"]}
+    expect("usd" in by_symbol_row and "uah" in by_symbol_row, f"starter currencies {list(by_symbol_row)}")
+    eur_id = by_symbol_row["eur"]["id"]
+    usd = by_symbol_row["usd"]
     by_id = request("GET", f"/currencies/{eur_id}")
     expect(by_id and by_id["symbol"] == "eur", "get eur by id")
 
-    usd = request(
-        "POST",
-        "/currencies",
-        body={"symbol": "usd", "name": "US Dollar", "is_default": False},
-        expected=201,
-    )
-    expect(usd and usd["symbol"] == "usd", "create usd")
+    expect(usd and usd["symbol"] == "usd", "starter usd")
     dup_usd = request(
         "POST",
         "/currencies",
@@ -108,6 +103,11 @@ def run(env: dict[str, str]) -> None:
         expected=201,
     )
     expect(gbp is not None, "create gbp")
+
+    starter = request("GET", "/categories")
+    starter_names = {c["name"] for c in (starter or {}).get("items", [])}
+    for name in ("groceries", "eating out", "transport", "rent", "salary", "health", "fun", "other"):
+        expect(name in starter_names, f"missing starter category {name}")
 
     food = request("POST", "/categories", body={"name": "food"}, expected=201)
     expect(food and food["name"] == "food", "create food")
@@ -265,12 +265,7 @@ def run(env: dict[str, str]) -> None:
         },
         expected=201,
     )
-    uah = request(
-        "POST",
-        "/currencies",
-        body={"symbol": "uah", "name": "Hryvnia", "is_default": False},
-        expected=201,
-    )
+    uah = by_symbol_row["uah"]
     uah_row = request(
         "POST",
         "/transactions",
@@ -324,18 +319,6 @@ def run(env: dict[str, str]) -> None:
     )
     expect((spent_mixed or {}).get("currency", "").lower() == "eur", "spent currency")
     expect(gbp_row and gbp_row.get("amount") is None, "gbp row amount omitted")
-    mixed_summary = mous_cli(env, ["summary", "1", "day"])
-    expect(mixed_summary.returncode == 0, f"summary mixed failed: {mixed_summary.stderr}")
-    summary_out = summary_money(mixed_summary.stdout, "out")
-    summary_inn = summary_money(mixed_summary.stdout, "in")
-    expect(
-        summary_out is not None and abs(summary_out - converted_spent) < 1e-3,
-        f"summary converted out {mixed_summary.stdout}",
-    )
-    expect(
-        summary_inn is not None and abs(summary_inn - 2000) < 1e-3,
-        f"summary converted in {mixed_summary.stdout}",
-    )
     request("DELETE", f"/transactions/{gbp_row['id']}", expected=204)
     request("DELETE", f"/transactions/{uah_row['id']}", expected=204)
     request("DELETE", f"/transactions/{usd_row['id']}", expected=204)
@@ -427,7 +410,5 @@ def run(env: dict[str, str]) -> None:
     request("DELETE", f"/transactions/{coffee['id']}", expected=204)
     request("DELETE", f"/categories/{food['id']}", expected=204)
     request("DELETE", f"/currencies/{gbp['id']}", expected=204)
-    request("DELETE", f"/currencies/{uah['id']}", expected=204)
-    request("DELETE", f"/currencies/{usd['id']}", expected=204)
     missing = request("GET", "/categories/nope", expected=404)
     expect(missing and missing["error"] == "not_found", "missing category")

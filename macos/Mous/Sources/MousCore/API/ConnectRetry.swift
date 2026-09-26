@@ -19,6 +19,22 @@ public enum ConnectRetry: Sendable {
         return delay(attempt: attempt - bootAttempts)
     }
 
+    /// Safe to auto-retry: GET/HEAD/OPTIONS only. POST/PATCH/DELETE may have committed.
+    public static func isIdempotent(_ method: String) -> Bool {
+        switch method.uppercased() {
+        case "GET", "HEAD", "OPTIONS":
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Connectivity backoff is only for idempotent methods. Never retry a timed-out POST.
+    public static func shouldRetry(method: String, error: APIError) -> Bool {
+        guard error.isUnreachable else { return false }
+        return isIdempotent(method)
+    }
+
     public static func sleep(attempt: Int) async throws {
         try await sleep(seconds: delay(attempt: attempt))
     }

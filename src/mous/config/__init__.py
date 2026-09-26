@@ -6,7 +6,6 @@ from mous.config.utils import (
     ensure_config,
     is_dev_environment,
     load_config,
-    report_period,
     save_config,
 )
 
@@ -18,6 +17,5 @@ __all__ = [
     "ensure_config",
     "is_dev_environment",
     "load_config",
-    "report_period",
     "save_config",
 ]

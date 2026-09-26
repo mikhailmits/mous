@@ -21,12 +21,19 @@ struct EntryCard: View {
     @State private var motionGeneration = 0
     // First open keeps the coffee hint; each successful save rotates the next.
     @State private var placeholderIndex = 0
+    // Dedupes SwiftUI onChange double-fires so the hint does not skip.
+    @State private var lastHandledCommitTick = 0
+    // After assist accept, ignore a follow-up Return/key-repeat that would post.
+    @State private var submitSuppressed = false
+    @State private var submitSuppressGeneration = 0
+    // Synchronous lock so two Tasks cannot start before isSubmitting flips.
+    @State private var localSubmitLock = false
 
     private static let placeholderHints = [
-        "-30 coffee with dave",
-        "- 10 hii",
-        "+10hii",
-        "10 eur to usd",
+        "-450 uah groceries",
+        "+1200 eur salary",
+        "45 + 34",
+        "4 eur to uah",
     ]
 
     private var placeholder: String {
@@ -34,48 +41,42 @@ struct EntryCard: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
-            glyph
-                .frame(width: 16, height: 16)
-                .accessibilityHidden(true)
-                .animation(.easeOut(duration: reduceMotion ? 0.1 : 0.18), value: leadingGlyph)
-            ZStack(alignment: .leading) {
-                AlwaysFocusedLineField(
-                    text: $store.text,
-                    placeholder: placeholder,
-                    onSubmit: {
-                        // Convert on the key event, same as Tab, so the field
-                        // editor stays up and the caret stays after the amount.
-                        if store.applyFxCalc() {
-                            NotificationCenter.default.post(name: .mousRestoreInputFocus, object: nil)
-                            return
-                        }
-                        Task {
-                            await store.submit()
-                            NotificationCenter.default.post(name: .mousRestoreInputFocus, object: nil)
-                        }
-                    },
-                    onTab: {
-                        _ = store.applyFxCalc()
-                        NotificationCenter.default.post(name: .mousRestoreInputFocus, object: nil)
-                    }
-                )
-                .opacity(fieldOpacity)
-                .accessibilityLabel("New transaction")
-                .accessibilityHint("Plus for income, minus for expense, then amount, optional currency, optional description. Amount currency to currency, then Tab or Return, converts.")
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                glyph
+                    .frame(width: 16, height: 16)
+                    .accessibilityHidden(true)
+                    .animation(MousMotion.quick(reduceMotion: reduceMotion), value: leadingGlyph)
+                ZStack(alignment: .leading) {
+                    AlwaysFocusedLineField(
+                        text: $store.text,
+                        placeholder: placeholder,
+                        onSubmit: handleReturn,
+                        onTab: handleTab
+                    )
+                    .opacity(fieldOpacity)
+                    .accessibilityLabel("New transaction")
+                    .accessibilityHint("Plus for income, minus for expense, then amount, optional currency, optional description. A calculator row appears for math and currency conversion. Return uses it.")
 
-                if isDeparting {
-                    // The sent line rolls its digits away, same Tick as the dashboard.
-                    Text(departingLine)
-                        .font(.system(size: 16).monospacedDigit())
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                        .mousTick(numeric: true, reduceMotion: reduceMotion)
-                        .allowsHitTesting(false)
+                    if isDeparting {
+                        Text(departingLine)
+                            .font(.system(size: 16).monospacedDigit())
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                            .mousTick(numeric: true, reduceMotion: reduceMotion)
+                            .allowsHitTesting(false)
+                    }
                 }
             }
+            .padding(.horizontal, 18)
+            .padding(.top, 16)
+            .padding(.bottom, store.assistSuggestion == nil ? 16 : 6)
+            if let suggestion = store.assistSuggestion {
+                calculatorRow(suggestion)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
-        .padding(.horizontal, 18)
+        .animation(MousMotion.spring(reduceMotion: reduceMotion), value: store.assistSuggestion)
         .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
         .mousCard()
         .offset(x: shakeOffset)
@@ -88,15 +89,94 @@ struct EntryCard: View {
             playReject()
             restoreFocusAfter(seconds: 0.3)
         }
-        .onChange(of: commitTick) { _, _ in
+        .onChange(of: commitTick) { _, new in
+            guard new != lastHandledCommitTick else { return }
+            lastHandledCommitTick = new
             placeholderIndex = (placeholderIndex + 1) % Self.placeholderHints.count
             playCommit()
             restoreFocusAfter(seconds: 0.36)
         }
     }
 
+    /// Return: calculator inserts only; a signed spend line posts.
+    private func handleReturn() {
+        if acceptAssistFromUI() { return }
+        guard !submitSuppressed else {
+            NotificationCenter.default.post(name: .mousRestoreInputFocus, object: nil)
+            return
+        }
+        guard !localSubmitLock, !store.isSubmitting else {
+            NotificationCenter.default.post(name: .mousRestoreInputFocus, object: nil)
+            return
+        }
+        localSubmitLock = true
+        Task {
+            defer { localSubmitLock = false }
+            await store.submit()
+            NotificationCenter.default.post(name: .mousRestoreInputFocus, object: nil)
+        }
+    }
+
+    /// Tab: FX/math insert only — never posts.
+    private func handleTab() {
+        if acceptAssistFromUI() { return }
+        NotificationCenter.default.post(name: .mousRestoreInputFocus, object: nil)
+    }
+
+    @discardableResult
+    private func acceptAssistFromUI() -> Bool {
+        guard store.acceptAssist() else { return false }
+        // Key-repeat / second command selector after insert must not post
+        // a signed FX result (e.g. `-11usd`).
+        suppressSubmitBriefly()
+        NotificationCenter.default.post(name: .mousRestoreInputFocus, object: nil)
+        return true
+    }
+
+    private func suppressSubmitBriefly() {
+        submitSuppressed = true
+        submitSuppressGeneration += 1
+        let generation = submitSuppressGeneration
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            guard generation == submitSuppressGeneration else { return }
+            submitSuppressed = false
+        }
+    }
+
+    private func calculatorRow(_ suggestion: InputAssist.Suggestion) -> some View {
+        // Tap, not Button: a SwiftUI Button can become the window default
+        // action and fire on Return in addition to the field's onSubmit,
+        // which would accept then post a signed convert.
+        HStack(spacing: 8) {
+            Text(suggestion.label)
+                .font(.system(size: 13, weight: .medium, design: .rounded).monospacedDigit())
+                .foregroundStyle(mousAccent)
+            Spacer(minLength: 8)
+            Text("Return")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 18)
+        .padding(.bottom, 14)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            _ = acceptAssistFromUI()
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("Calculator result \(suggestion.label)")
+        .accessibilityLabel(suggestion.label)
+        .accessibilityValue(suggestion.label)
+        .accessibilityHint("Inserts this result into the line.")
+        .accessibilityAction(.default) {
+            _ = acceptAssistFromUI()
+        }
+    }
+
     private func restoreFocusAfter(seconds: Double) {
+        let generation = motionGeneration
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
+            guard generation == motionGeneration else { return }
             NotificationCenter.default.post(name: .mousRestoreInputFocus, object: nil)
         }
     }
@@ -116,7 +196,7 @@ struct EntryCard: View {
         case .empty:
             return .none
         case .composing, .valid:
-            if store.isFxCalcReady { return .convert }
+            if store.assistSuggestion != nil { return .convert }
             return store.presentation == .valid ? .check : .none
         }
     }
@@ -151,6 +231,11 @@ struct EntryCard: View {
     private func playReject() {
         motionGeneration += 1
         let generation = motionGeneration
+        // Drop any in-flight commit overlay so opacity is not left at 0.01.
+        isDeparting = false
+        departingLine = ""
+        shakeOffset = 0
+
         if reduceMotion {
             withAnimation(.easeOut(duration: 0.08)) { fieldOpacity = 0.55 }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -159,6 +244,7 @@ struct EntryCard: View {
             }
             return
         }
+        fieldOpacity = 1
         let swings: [(delay: Double, offset: CGFloat)] = [
             (0.0, 4), (0.07, -3), (0.14, 2), (0.21, 0),
         ]
@@ -178,6 +264,8 @@ struct EntryCard: View {
     private func playCommit() {
         motionGeneration += 1
         let generation = motionGeneration
+        // Drop any in-flight shake so offset does not stick mid-swing.
+        shakeOffset = 0
 
         departingLine = store.outgoingLine
         isDeparting = true
@@ -185,18 +273,18 @@ struct EntryCard: View {
         // Floor at 0.01 so AppKit keeps first responder.
         fieldOpacity = 0.01
 
-        let tick = reduceMotion ? Animation.easeOut(duration: 0.15) : .snappy(duration: 0.3)
+        let tick = MousMotion.tick(reduceMotion: reduceMotion)
         DispatchQueue.main.async {
             guard generation == motionGeneration else { return }
             withAnimation(tick) {
                 departingLine = ""
             }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + (reduceMotion ? 0.16 : 0.22)) {
             guard generation == motionGeneration else { return }
-            withAnimation(.easeOut(duration: 0.15)) { fieldOpacity = 1 }
+            withAnimation(MousMotion.fade(reduceMotion: reduceMotion)) { fieldOpacity = 1 }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + (reduceMotion ? 0.2 : 0.32)) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + (reduceMotion ? 0.24 : 0.48)) {
             guard generation == motionGeneration else { return }
             isDeparting = false
         }

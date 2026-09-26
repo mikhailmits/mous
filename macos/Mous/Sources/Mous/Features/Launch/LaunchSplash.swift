@@ -62,13 +62,13 @@ struct LaunchSplash: View {
                     index = (index + 1) % images.count
                     continue
                 }
-                try await Task.sleep(nanoseconds: 280_000_000)
-                withAnimation(.easeIn(duration: 0.14)) { flipDegrees = 90 }
-                try await Task.sleep(nanoseconds: 140_000_000)
+                try await Task.sleep(nanoseconds: 420_000_000)
+                withAnimation(MousMotion.fade(reduceMotion: false)) { flipDegrees = 90 }
+                try await Task.sleep(nanoseconds: 200_000_000)
                 index = (index + 1) % images.count
                 flipDegrees = -90
-                withAnimation(.easeOut(duration: 0.18)) { flipDegrees = 0 }
-                try await Task.sleep(nanoseconds: 180_000_000)
+                withAnimation(MousMotion.fade(reduceMotion: false)) { flipDegrees = 0 }
+                try await Task.sleep(nanoseconds: 280_000_000)
             }
         } catch {
             // Cancelled when the splash leaves the tree.

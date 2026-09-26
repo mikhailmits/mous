@@ -38,22 +38,15 @@ enum MousHarness {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var store: AppStore!
     private var panel: BorderlessPanelController?
-    private var reportMonitor: SummaryReportMonitor?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(MousHarness.isHeadless ? .accessory : .regular)
-        MoneyDisplay.useStubQuotes()
+        FxRateFeed.start(headless: MousHarness.isHeadless)
         LocalBackend.shared.kickoff()
         MousAppearance.apply(MousConfigFile.load().theme)
-        store = AppStore(client: APIClient(baseURL: LocalBackend.apiBaseURL()))
-        let reportNotice = ReportNoticeChrome()
-        let panel = BorderlessPanelController(store: store, reportNotice: reportNotice)
+        store = AppStore(client: APIClient())
+        let panel = BorderlessPanelController(store: store)
         self.panel = panel
-        let monitor = SummaryReportMonitor(notice: reportNotice) { [weak self] capturedAt in
-            self?.panel?.openFromReportAlert(capturedAt: capturedAt)
-        }
-        reportMonitor = monitor
-        monitor.start()
         panel.show()
         if LocalBackend.shared.isBundled {
             Task { @MainActor [weak self] in
@@ -66,7 +59,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        reportMonitor?.stop()
         LocalBackend.shared.stop()
     }
 
@@ -104,7 +96,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
-        if MousHarness.isHeadless { return }
+        // Headless / demo e2e: never re-enter stealFocus.
+        if MousHarness.keepsPanelVisible { return }
         panel?.show()
     }
 

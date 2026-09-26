@@ -3,7 +3,11 @@ import MousCore
 import SwiftUI
 
 private struct MousAccentKey: EnvironmentKey {
-    static let defaultValue = Color(red: 0.4824, green: 1, blue: 0).opacity(0.55)
+    static let defaultValue = MousTheme.lime.mark
+}
+
+private struct MousCanvasKey: EnvironmentKey {
+    static let defaultValue = MousTheme.lime.canvas
 }
 
 extension EnvironmentValues {
@@ -11,86 +15,60 @@ extension EnvironmentValues {
         get { self[MousAccentKey.self] }
         set { self[MousAccentKey.self] = newValue }
     }
+
+    var mousCanvas: Color {
+        get { self[MousCanvasKey.self] }
+        set { self[MousCanvasKey.self] = newValue }
+    }
 }
 
-/// Mark color sampled from `logo-variant-2`; light theme darkens it the same
-/// way the themed icons darken their marks.
-enum MousPalette {
-    static let fallbackMark = NSColor(srgbRed: 0.4824, green: 1, blue: 0, alpha: 1)
-
-    static func markColor(isDark: Bool) -> NSColor {
-        let sampled = MousIcons.sampledMarkColor() ?? fallbackMark
-        if isDark { return sampled }
-        return sampled.blended(withFraction: 0.38, of: .black) ?? sampled
+extension MousTheme {
+    var mark: Color {
+        Color(red: markRGB.red, green: markRGB.green, blue: markRGB.blue)
     }
 
-    static func accent(isDark: Bool) -> Color {
-        Color(nsColor: markColor(isDark: isDark)).opacity(isDark ? 0.55 : 0.78)
+    var canvas: Color {
+        Color(red: canvasRGB.red, green: canvasRGB.green, blue: canvasRGB.blue)
     }
+
+    var nsCanvas: NSColor {
+        NSColor(srgbRed: canvasRGB.red, green: canvasRGB.green, blue: canvasRGB.blue, alpha: 1)
+    }
+
+    var nsMark: NSColor {
+        NSColor(srgbRed: markRGB.red, green: markRGB.green, blue: markRGB.blue, alpha: 1)
+    }
+
+    /// White cards use light text colors. The other themes stay dark.
+    var isLight: Bool { self == .white }
 }
 
 struct MousThemedChrome: ViewModifier {
-    @Environment(\.colorScheme) private var colorScheme
+    var theme: MousTheme
 
     func body(content: Content) -> some View {
-        content.environment(\.mousAccent, MousPalette.accent(isDark: colorScheme == .dark))
+        content
+            .environment(\.mousAccent, theme.mark.opacity(0.92))
+            .environment(\.mousCanvas, theme.canvas)
     }
 }
 
-/// Maps the saved `theme` config onto AppKit, SwiftUI, dock, and accent.
+/// The saved value picks the mark, the card tint, and light vs dark text.
 @MainActor
 enum MousAppearance {
-    private static var appearanceObservation: NSKeyValueObservation?
-
-    static func nsAppearance(for theme: MousTheme) -> NSAppearance? {
-        switch theme {
-        case .system: return nil
-        case .light: return NSAppearance(named: .aqua)
-        case .dark: return NSAppearance(named: .darkAqua)
-        }
-    }
-
-    static func colorScheme(for theme: MousTheme) -> ColorScheme? {
-        switch theme {
-        case .system: return nil
-        case .light: return .light
-        case .dark: return .dark
-        }
-    }
-
-    static func colorScheme(from rawValue: String) -> ColorScheme? {
-        colorScheme(for: MousTheme(rawValue: rawValue) ?? .system)
-    }
-
-    static func isDark(theme: MousTheme, appearance: NSAppearance) -> Bool {
-        switch theme {
-        case .dark: return true
-        case .light: return false
-        case .system:
-            return appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        }
-    }
-
     static func apply(_ theme: MousTheme) {
-        NSApp.appearance = nsAppearance(for: theme)
-        MousIcons.applyDockIcon(isDark: isDark(theme: theme, appearance: NSApp.effectiveAppearance))
-        NotificationCenter.default.post(name: .mousAppearanceDidChange, object: theme.rawValue)
-        observeSystemAppearance()
+        NSApp.appearance = NSAppearance(named: theme.isLight ? .aqua : .darkAqua)
+        MousIcons.applyDockIcon(theme: theme)
+        // Always post the canonical rawValue (parse first) so "dark" /
+        // "logo-variant-2" land on the same MousTheme as Settings.
+        NotificationCenter.default.post(
+            name: .mousAppearanceDidChange,
+            object: theme.rawValue
+        )
     }
 
     static func apply(_ rawValue: String) {
-        apply(MousTheme(rawValue: rawValue) ?? .system)
-    }
-
-    static func observeSystemAppearance() {
-        guard appearanceObservation == nil else { return }
-        appearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.new]) { _, _ in
-            Task { @MainActor in
-                let theme = MousTheme(rawValue: MousConfigFile.load().theme) ?? .system
-                MousIcons.applyDockIcon(isDark: isDark(theme: theme, appearance: NSApp.effectiveAppearance))
-                NotificationCenter.default.post(name: .mousAppearanceDidChange, object: theme.rawValue)
-            }
-        }
+        apply(MousTheme.parse(rawValue))
     }
 }
 

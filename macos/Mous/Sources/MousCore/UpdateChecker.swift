@@ -36,10 +36,17 @@ public enum UpdateChecker {
     }
 
     public static func versionParts(_ raw: String) -> [Int] {
-        normalizedVersion(raw)
+        let normalized = normalizedVersion(raw)
+        guard !normalized.isEmpty else { return [] }
+        return normalized
             .split(separator: ".", omittingEmptySubsequences: true)
+            .prefix(8)
             .map { component in
-                Int(component.prefix(while: \.isNumber)) ?? 0
+                let digits = component.prefix(while: \.isNumber)
+                guard !digits.isEmpty else { return 0 }
+                // Cap width so a hostile tag cannot blow past Int via a huge digit run.
+                let clipped = digits.prefix(9)
+                return Int(clipped) ?? 0
             }
     }
 }

@@ -159,6 +159,7 @@ KEY_CODES = {
     "command": 55,
 }
 COMMAND_FLAG = 1 << 20  # kCGEventFlagMaskCommand
+SHIFT_FLAG = 1 << 17  # kCGEventFlagMaskShift
 
 
 def pid_flags(pid: int, command: bool) -> bool:
@@ -224,6 +225,10 @@ def pid_key(pid: int, stroke: str, command: bool = False, phase: str = "both") -
         if code is None:
             return False
     flags = COMMAND_FLAG if command else 0
+    # Plus is shift-equals. Keypad plus (69) often never arrives as a character.
+    if stroke == "+" and not command:
+        code = 24
+        flags |= SHIFT_FLAG
     script = """
     function run(argv) {
       ObjC.import('CoreGraphics');
@@ -253,6 +258,53 @@ def pid_key(pid: int, stroke: str, command: bool = False, phase: str = "both") -
     return completed.returncode == 0 and "ok" in (completed.stdout or "")
 
 
+def pid_type(pid: int, stroke: str) -> bool:
+    """Post a string of keys in one process so the popup pass stays fast."""
+    codes: list[str] = []
+    flags: list[str] = []
+    for char in stroke:
+        code = KEY_CODES.get(char)
+        flag = 0
+        if char == "+":
+            code = 24
+            flag = SHIFT_FLAG
+        if code is None:
+            return False
+        codes.append(str(code))
+        flags.append(str(flag))
+    script = """
+    function run(argv) {
+      ObjC.import('CoreGraphics');
+      ObjC.import('Foundation');
+      ObjC.import('ApplicationServices');
+      if (!$.AXIsProcessTrusted()) return 'no-ax';
+      var pid = Number(argv[0]);
+      var codes = argv[1].split(',');
+      var flags = argv[2].split(',');
+      for (var i = 0; i < codes.length; i++) {
+        var code = Number(codes[i]);
+        var flag = Number(flags[i]);
+        var down = $.CGEventCreateKeyboardEvent(null, code, true);
+        $.CGEventSetFlags(down, flag);
+        $.CGEventPostToPid(pid, down);
+        var up = $.CGEventCreateKeyboardEvent(null, code, false);
+        $.CGEventSetFlags(up, flag);
+        $.CGEventPostToPid(pid, up);
+        $.NSThread.sleepForTimeInterval(0.016);
+      }
+      return 'ok';
+    }
+    """
+    completed = subprocess.run(
+        ["osascript", "-l", "JavaScript", "-", str(pid), ",".join(codes), ",".join(flags)],
+        input=script,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return completed.returncode == 0 and "ok" in (completed.stdout or "")
+
+
 def send_keys(stroke: str, command: bool = False, pid: int | None = None) -> bool:
     if pid is not None:
         if command:
@@ -260,11 +312,7 @@ def send_keys(stroke: str, command: bool = False, pid: int | None = None) -> boo
             time.sleep(0.02)
         try:
             if len(stroke) > 1 and stroke not in KEY_CODES:
-                ok = True
-                for char in stroke:
-                    ok = pid_key(pid, char, command=command) and ok
-                    time.sleep(0.05)
-                return ok
+                return pid_type(pid, stroke)
             return pid_key(pid, stroke, command=command)
         finally:
             if command:
@@ -565,7 +613,7 @@ def click_until_config(
     press = ax_click_toggle if toggle else ax_click
     for _ in range(attempts):
         press(pid, needle)
-        time.sleep(0.4)
+        time.sleep(0.12)
         if read_config(directory).get(key) == want:
             return True
     return False
@@ -600,6 +648,9 @@ def ax_has(pid: int, needle: str) -> bool:
                     end try
                     try
                       set hay to hay & (value of attribute "AXIdentifier" of ui as text) & " "
+                    end try
+                    try
+                      set hay to hay & (value of ui as text) & " "
                     end try
                     if hay contains theNeedle then return "ok"
                   end try
@@ -655,17 +706,6 @@ def hover_in_window(pid: int, x_frac: float, y_frac: float) -> bool:
         return False
     x, y, w, h = frame
     return pid_mouse(pid, x + w * x_frac, y + h * y_frac)
-
-
-def wait_coffee_category(timeout: float = 16.0) -> bool:
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        cats = request("GET", "/categories")
-        names = [c["name"].lower() for c in (cats or {}).get("items", [])]
-        if "coffee" in names:
-            return True
-        time.sleep(0.3)
-    return False
 
 
 def wait_demo_coffee_posted(timeout: float = 8.0) -> bool:

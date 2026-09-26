@@ -1,4 +1,4 @@
-"""Headless popup: dashboard, entry, tips, settings, hide-balance, notify, inbox."""
+"""Headless popup: dashboard, entry, calculator, tips, settings, hide-balance."""
 
 from __future__ import annotations
 
@@ -17,12 +17,11 @@ from e2e_mous.ax import (
     mous_bin_path,
     other_mous_pids,
     send_keys,
-    wait_coffee_category,
     wait_demo_coffee_posted,
     wait_ui,
     wait_window,
 )
-from e2e_mous.features import calc, hide_balance, notify, parser_shapes
+from e2e_mous.features import calc, hide_balance, parser_shapes
 from e2e_mous.harness import (
     E2E_PORT,
     Failed,
@@ -70,11 +69,11 @@ def run(env: dict[str, str], directory: Path, force: bool = False) -> list[str]:
                     appeared = True
                     notes.append("process up (off-screen frame optional)")
                     break
-                time.sleep(0.08)
+                time.sleep(0.05)
         if not appeared:
             raise Failed("e2e Mous window never appeared")
-        time.sleep(1.0)
-        if wait_ui(proc.pid, "Spent today") or wait_ui(proc.pid, "New transaction"):
+        time.sleep(0.25)
+        if wait_ui(proc.pid, "New transaction", timeout=2.0) or wait_ui(proc.pid, "Spent today", timeout=0.4):
             notes.append("dashboard spent/left/month/saved")
             home = ax_tree_text(proc.pid)
             if "saved" in home.lower() and "%" in home:
@@ -84,22 +83,14 @@ def run(env: dict[str, str], directory: Path, force: bool = False) -> list[str]:
         else:
             notes.append("WARN: dashboard AX labels not found (window is off-screen)")
 
-        if wait_coffee_category():
-            notes.append("repeat coffee became a category")
-        else:
-            notes.append("coffee category not present yet (demo may still be typing)")
-            if wait_coffee_category(6):
-                notes.append("repeat coffee became a category")
-            else:
-                raise Failed("repeat coffee was not promoted to a category")
         if not wait_demo_coffee_posted():
             raise Failed("demo -4 coffee had not posted yet")
-        time.sleep(0.35)
+        notes.append("demo line posted")
 
         expect(keys("a", command=True), "pid key events")
         keys("xyz")
         keys("return")
-        time.sleep(0.5)
+        time.sleep(0.2)
         keys("a", command=True)
         keys("delete")
         notes.append("invalid line reject")
@@ -107,68 +98,62 @@ def run(env: dict[str, str], directory: Path, force: bool = False) -> list[str]:
         calc.run_ui(proc.pid, notes)
         parser_shapes.run_ui(proc.pid, notes)
 
-        if hold_command(0.7, pid=proc.pid):
+        if hold_command(0.2, pid=proc.pid):
             notes.append("⌘ keycaps")
-        time.sleep(0.2)
 
         if hover_in_window(proc.pid, 0.22, 0.22):
-            time.sleep(0.5)
-            if wait_ui(proc.pid, "History", timeout=1.5):
+            if wait_ui(proc.pid, "History", timeout=0.4):
                 notes.append("hover history")
             else:
                 notes.append("hover history posted (tip AX not required)")
         if hover_in_window(proc.pid, 0.82, 0.38):
-            time.sleep(0.5)
-            if wait_ui(proc.pid, "Most expensive", timeout=1.5):
+            if wait_ui(proc.pid, "Most expensive", timeout=0.4):
                 notes.append("hover expensive")
             else:
                 notes.append("hover expensive posted (tip AX not required)")
         keys("esc")
-        time.sleep(0.25)
+        time.sleep(0.08)
 
         keys("m", command=True)
-        time.sleep(0.8)
-        if wait_ui(proc.pid, "History"):
+        if wait_ui(proc.pid, "History", timeout=0.45):
             notes.append("⌘M history")
         else:
             notes.append("WARN: ⌘M history AX missed")
         keys("esc")
-        time.sleep(0.35)
+        time.sleep(0.08)
 
         keys("x", command=True)
-        time.sleep(0.8)
-        if wait_ui(proc.pid, "Most expensive"):
+        if wait_ui(proc.pid, "Most expensive", timeout=0.45):
             notes.append("⌘X most expensive")
         else:
             notes.append("WARN: ⌘X expensive AX missed")
         keys("f", command=True)
-        time.sleep(0.8)
+        time.sleep(0.08)
         keys("esc")
-        time.sleep(0.35)
+        time.sleep(0.08)
         keys("f", command=True)
-        time.sleep(0.8)
+        time.sleep(0.08)
         keys("esc")
-        time.sleep(0.3)
+        time.sleep(0.08)
         notes.append("⌘X expensive + ⌘F focused list")
 
         keys("o", command=True)
-        time.sleep(0.7)
-        if wait_ui(proc.pid, "Settings") or wait_ui(proc.pid, "Notifications"):
+        if wait_ui(proc.pid, "Settings", timeout=0.45):
             notes.append("⌘O options")
         else:
             notes.append("WARN: ⌘O options AX missed")
         keys("esc")
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         keys("s", command=True)
-        time.sleep(0.8)
+        time.sleep(0.2)
         notes.append("⌘S settings")
-        if not wait_ui(proc.pid, "USD", timeout=3.0):
+        if not wait_ui(proc.pid, "USD", timeout=1.2):
             keys("esc")
-            time.sleep(0.2)
+            time.sleep(0.1)
             keys("s", command=True)
-            time.sleep(0.8)
-            wait_ui(proc.pid, "USD", timeout=3.0)
+            time.sleep(0.2)
+            wait_ui(proc.pid, "USD", timeout=1.2)
         if not click_until_config(proc.pid, "USD", directory, "currency", "usd"):
             ax_click(proc.pid, "Options")
             time.sleep(0.3)
@@ -178,27 +163,16 @@ def run(env: dict[str, str], directory: Path, force: bool = False) -> list[str]:
                 click_until_config(proc.pid, "USD", directory, "currency", "usd"),
                 "could not click USD",
             )
-        time.sleep(0.4)
         notes.append("currency USD")
         cfg = json.loads((directory / "config.json").read_text(encoding="utf-8"))
         expect(cfg.get("currency") == "usd", f"USD config {cfg.get('currency')}")
-        for needle, note in (
-            ("Light", "theme light"),
-            ("System", "theme system"),
-            ("Dark", "theme dark"),
-            ("Month", "cadence month"),
-            ("Custom", "cadence custom"),
-            ("2 weeks", "cadence 2 weeks"),
-        ):
-            if ax_click_retry(proc.pid, needle, attempts=2):
-                time.sleep(0.3)
-                notes.append(note)
-            else:
-                notes.append(f"WARN: could not click {needle}")
+        if ax_click_retry(proc.pid, "Clay", attempts=2):
+            notes.append("theme clay")
+        else:
+            notes.append("WARN: could not click Clay")
         hide_balance.run_ui(proc.pid, directory, notes)
-        notify.run_ui(proc.pid, directory, notes)
         if ax_click_retry(proc.pid, "Check for updates", attempts=2):
-            time.sleep(0.8)
+            time.sleep(0.3)
             notes.append("Check for updates")
         else:
             notes.append("WARN: could not click Check for updates")
@@ -211,20 +185,16 @@ def run(env: dict[str, str], directory: Path, force: bool = False) -> list[str]:
         expect(Path(cfg["database_path"]).resolve().parent == directory.resolve(), "settings still isolated")
         expect(int(cfg["port"]) == E2E_PORT, "settings port")
         notes.append("Advanced host/port/db/dev")
-        if cfg.get("notify_in_app") is not True:
-            ax_click(proc.pid, "In-app inbox")
-        if cfg.get("notify_macos") is not False:
-            ax_click(proc.pid, "Mac banners")
         if cfg.get("hide_balance") is True:
             ax_click(proc.pid, "Hide balance")
         keys("esc")
-        time.sleep(0.4)
-        wait_ui(proc.pid, "Spent today", timeout=2.5)
+        time.sleep(0.12)
+        wait_ui(proc.pid, "New transaction", timeout=0.8)
         cfg = json.loads((directory / "config.json").read_text(encoding="utf-8"))
         expect(cfg.get("currency") == "usd", f"home after USD, config {cfg.get('currency')}")
 
         keys("s", command=True)
-        time.sleep(0.8)
+        time.sleep(0.3)
         wait_ui(proc.pid, "EUR", timeout=3.0)
         restored = click_until_config(proc.pid, "EUR", directory, "currency", "eur", attempts=12)
         if not restored:
@@ -232,47 +202,20 @@ def run(env: dict[str, str], directory: Path, force: bool = False) -> list[str]:
             time.sleep(0.3)
             wait_ui(proc.pid, "Spent today", timeout=2.0)
             keys("s", command=True)
-            time.sleep(1.0)
+            time.sleep(0.3)
             wait_ui(proc.pid, "EUR", timeout=3.0)
             restored = click_until_config(proc.pid, "EUR", directory, "currency", "eur", attempts=8)
         expect(restored, "could not restore EUR in Settings")
-        ax_click(proc.pid, "Dark")
+        if ax_click_retry(proc.pid, "Lime", attempts=2):
+            notes.append("theme lime")
         keys("esc")
-        time.sleep(0.4)
-
-        keys("n", command=True)
-        time.sleep(0.8)
-        if not wait_ui(proc.pid, "Notifications"):
-            notes.append("WARN: ⌘N notifications AX missed")
-        else:
-            notes.append("⌘N notifications")
-        empty_hay = ax_tree_text(proc.pid).lower()
-        if "no reports yet" in empty_hay:
-            if "next report" in empty_hay or "report lands" in empty_hay or "period closes" in empty_hay:
-                notes.append("notifications empty copy")
-            else:
-                notes.append("WARN: notifications empty copy AX missed")
-        if ax_click(proc.pid, "2 week") or ax_click(proc.pid, "report"):
-            time.sleep(0.5)
-            notes.append("notification detail")
-            detail = ax_tree_text(proc.pid).lower()
-            if "saved" in detail and "%" in detail:
-                notes.append("notification saved percent")
-            else:
-                notes.append("WARN: notification saved percent AX missed")
-            if "saved -€" in detail or "saved -$" in detail or "saved -uah" in detail:
-                raise Failed("notification Saved still shows minus money")
-            keys("esc")
-            time.sleep(0.3)
-        else:
-            notes.append("WARN: could not open inbox row")
-        keys("esc")
-        time.sleep(0.3)
-        notes.append("⌘N notifications + Escape home")
+        time.sleep(0.12)
+        wait_ui(proc.pid, "New transaction", timeout=0.8)
 
         cats = request("GET", "/categories")
         names = [c["name"].lower() for c in (cats or {}).get("items", [])]
-        expect("coffee" in names, "coffee category disappeared")
+        for name in ("groceries", "eating out", "transport", "rent", "salary", "health", "fun", "other"):
+            expect(name in names, f"starter category {name} missing")
         cfg = json.loads((directory / "config.json").read_text(encoding="utf-8"))
         isolated_database(directory)
         expect(cfg["dev"] is True, "developer mode left on")

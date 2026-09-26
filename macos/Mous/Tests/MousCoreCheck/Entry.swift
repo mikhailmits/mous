@@ -15,7 +15,7 @@ struct MousCoreCheck {
         spendRankChecks()
         configChecks()
         balanceMaskChecks()
-        summaryReportChecks()
+        assistChecks()
         updateVersionChecks()
         await storeChecks()
         await apiClientChecks()

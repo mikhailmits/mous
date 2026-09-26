@@ -30,6 +30,7 @@ struct SpendTipHost: View {
     var onHover: (Bool) -> Void
     var onSizeChange: (CGSize) -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var theme = MousTheme.parse(MousConfigFile.load().theme)
 
     var body: some View {
         SpendTipCard(
@@ -37,7 +38,7 @@ struct SpendTipHost: View {
             emptyText: chrome.kind.emptyText,
             lines: chrome.kind.lines(from: store),
             currencyCode: store.displayCurrencyCode,
-            hideAmounts: store.hideBalance,
+            hideAmounts: store.amountsConcealed,
             showDayTotals: chrome.kind == .monthSpend,
             maxHeight: chrome.maxHeight,
             edge: chrome.edge,
@@ -47,12 +48,18 @@ struct SpendTipHost: View {
             onHover: onHover,
             onSizeChange: onSizeChange
         )
+        .modifier(MousThemedChrome(theme: theme))
+        .preferredColorScheme(theme.isLight ? .light : .dark)
+        .onReceive(NotificationCenter.default.publisher(for: .mousAppearanceDidChange)) { notification in
+            guard let raw = notification.object as? String else { return }
+            theme = MousTheme.parse(raw)
+        }
         .animation(
-            reduceMotion ? .easeOut(duration: 0.12) : .easeOut(duration: 0.18),
+            MousMotion.fade(reduceMotion: reduceMotion),
             value: chrome.appeared
         )
         .animation(
-            reduceMotion ? .easeOut(duration: 0.12) : .snappy(duration: 0.22),
+            MousMotion.quick(reduceMotion: reduceMotion),
             value: chrome.kind
         )
     }
@@ -73,7 +80,7 @@ struct FocusedSpendList: View {
                 emptyText: kind.emptyText,
                 lines: kind.lines(from: store),
                 currencyCode: store.displayCurrencyCode,
-                hideAmounts: store.hideBalance,
+                hideAmounts: store.amountsConcealed,
                 showDayTotals: kind == .monthSpend,
                 appeared: true,
                 reduceMotion: reduceMotion,
@@ -87,8 +94,9 @@ struct FocusedSpendList: View {
         .scrollBounceBehavior(.basedOnSize)
         .frame(width: MousPopup.cardWidth, height: max(height, 44), alignment: .top)
         .mousCard()
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel(kind.title)
+        .accessibilityIdentifier(kind.title)
         .accessibilityHint("Command F returns to the dashboard.")
     }
 }
@@ -198,6 +206,7 @@ struct SpendTipCard: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)
+        .accessibilityIdentifier(title)
         .accessibilityHint("Command F shows the full list.")
     }
 
@@ -304,8 +313,8 @@ struct SpendTipList: View {
             .offset(y: appeared || reduceMotion ? 0 : 4)
             .animation(
                 reduceMotion
-                    ? .easeOut(duration: 0.12)
-                    : .easeOut(duration: 0.18).delay(Double(min(index, 12)) * 0.022),
+                    ? MousMotion.fade(reduceMotion: true)
+                    : MousMotion.fade(reduceMotion: false).delay(Double(min(index, 12)) * 0.035),
                 value: appeared
             )
     }
@@ -380,17 +389,16 @@ struct SpendTipList: View {
 
     private func refreshMasks(force: Bool) {
         guard hideAmounts else { return }
-        let style = HideBalanceStyle.parse(MousConfigFile.load().hideBalanceStyle)
         var next = force ? [String: String]() : amountMasks
         for line in lines where next[line.id] == nil {
-            next[line.id] = BalanceMask.make(style: style)
+            next[line.id] = BalanceMask.veil(length: 4)
         }
         if showDayTotals {
             for run in Self.groupedDays(lines) {
                 guard let date = run.date else { continue }
                 let id = Self.dayTotalMaskID(date)
                 if next[id] == nil {
-                    next[id] = BalanceMask.make(style: style)
+                    next[id] = BalanceMask.veil(length: 4)
                 }
             }
         }
@@ -398,7 +406,7 @@ struct SpendTipList: View {
     }
 
     private func freshMask() -> String {
-        BalanceMask.make(style: HideBalanceStyle.parse(MousConfigFile.load().hideBalanceStyle))
+        BalanceMask.veil(length: 4)
     }
 
     private static func groupedDays(_ lines: [SpendTipLine]) -> [DayRun] {

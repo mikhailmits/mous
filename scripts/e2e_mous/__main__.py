@@ -7,6 +7,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 _SCRIPTS = Path(__file__).resolve().parents[1]
@@ -20,7 +21,6 @@ from e2e_mous.features import (  # noqa: E402
     fx,
     hide_balance,
     http,
-    notify,
     seed,
     swift,
     ui,
@@ -34,11 +34,70 @@ from e2e_mous.harness import (  # noqa: E402
     isolated_database,
     log,
     prod_fingerprint,
+    read_config,
+    request,
     start_api,
     stop,
     wait_health,
     write_config,
 )
+
+
+def _run(name: str, fn, timings: list[tuple[str, float]]) -> None:
+    log(f"feature {name}")
+    started = time.perf_counter()
+    fn()
+    timings.append((name, time.perf_counter() - started))
+
+
+def _digest(directory: Path, timings: list[tuple[str, float]], notes: list[str]) -> None:
+    log("--- result ---")
+    total = sum(seconds for _, seconds in timings)
+    log(f"passed in {total:.1f}s")
+    for name, seconds in timings:
+        log(f"  {name:<16} {seconds:.2f}s")
+    try:
+        cfg = read_config(directory)
+        currencies = request("GET", "/currencies") or {}
+        categories = request("GET", "/categories") or {}
+        accounts = request("GET", "/accounts") or {}
+        currency_items = currencies.get("items") if isinstance(currencies, dict) else None
+        category_items = categories.get("items") if isinstance(categories, dict) else None
+        account_items = accounts.get("items") if isinstance(accounts, dict) else None
+        main = next(
+            (row for row in (account_items or []) if isinstance(row, dict) and row.get("name") == "main"),
+            None,
+        )
+        balance = None
+        if isinstance(main, dict) and main.get("id") is not None:
+            balance = request("GET", f"/accounts/{main['id']}/balance")
+        symbols = ", ".join(
+            str(row.get("symbol") or "") for row in (currency_items or []) if isinstance(row, dict)
+        )
+        names = ", ".join(
+            str(row.get("name") or "") for row in (category_items or []) if isinstance(row, dict)
+        )
+        log(f"currencies: {symbols}")
+        log(f"categories: {names}")
+        if isinstance(balance, dict):
+            log(f"balance: {balance.get('amount')} {balance.get('currency')}")
+            parts = balance.get("by_currency") or []
+            if isinstance(parts, list) and parts:
+                native = ", ".join(
+                    f"{part.get('currency_id')}={part.get('amount')}"
+                    for part in parts
+                    if isinstance(part, dict)
+                )
+                log(f"balance by currency id: {native}")
+        log(
+            "config: "
+            f"theme={cfg.get('theme')} currency={cfg.get('currency')} "
+            f"hide_balance={cfg.get('hide_balance')}"
+        )
+    except Exception as exc:
+        log(f"digest partial: {exc}")
+    if notes:
+        log("ui: " + "; ".join(notes))
 
 
 def main() -> int:
@@ -74,40 +133,36 @@ def main() -> int:
     isolated_database(directory)
     api = None
     code = 0
+    timings: list[tuple[str, float]] = []
+    notes: list[str] = []
     try:
         if not args.skip_swift:
-            log("feature swift")
-            swift.run(env)
+            _run("swift", lambda: swift.run(env), timings)
         log(f"API on :{E2E_PORT}  config {directory}")
         api = start_api(env)
         wait_health(proc=api)
-        log("feature civil_today")
-        civil_today.run()
-        log("feature http")
-        http.run(env)
-        log("feature fx")
-        fx.run()
-        log("feature hide_balance")
-        hide_balance.run_http(directory)
-        log("feature notify")
-        notify.run_http(directory)
-        log("feature cli")
-        cli.run(env)
+        _run("civil_today", civil_today.run, timings)
+        _run("http", lambda: http.run(env), timings)
+        _run("fx", fx.run, timings)
+        _run("hide_balance", lambda: hide_balance.run_http(directory), timings)
+        _run("cli", lambda: cli.run(env), timings)
         if not args.no_ui:
-            log("feature ui")
-            seed.run(env, directory)
-            log("feature parser_shapes")
-            notes = ui.run(env, directory, force=args.force_ui)
-            for note in notes:
-                log(note)
+            _run("seed", lambda: seed.run(env, directory), timings)
+
+            def _ui() -> None:
+                notes.extend(ui.run(env, directory, force=args.force_ui))
+
+            _run("ui", _ui, timings)
         else:
             log("skip ui (--no-ui)")
+        _digest(directory, timings, notes)
         log("feature cli_api_down")
+        started = time.perf_counter()
         stop(api)
         api = None
         cli.run_api_down(env)
-        log("feature drop")
-        drop.run(env, directory)
+        timings.append(("cli_api_down", time.perf_counter() - started))
+        _run("drop", lambda: drop.run(env, directory), timings)
         log("ok")
     except Failed as exc:
         log(f"FAIL {exc}")

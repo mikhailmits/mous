@@ -6,11 +6,8 @@ public struct MousConfig: Codable, Equatable, Sendable {
     public var port: Int
     public var databasePath: String
     public var dev: Bool
-    public var reportPeriod: String
     public var theme: String
     public var currency: String
-    public var notifyInApp: Bool
-    public var notifyMacOS: Bool
     public var hideBalance: Bool
     public var hideBalanceStyle: String
 
@@ -19,11 +16,8 @@ public struct MousConfig: Codable, Equatable, Sendable {
         case port
         case databasePath = "database_path"
         case dev
-        case reportPeriod = "report_period"
         case theme
         case currency
-        case notifyInApp = "notify_in_app"
-        case notifyMacOS = "notify_macos"
         case hideBalance = "hide_balance"
         case hideBalanceStyle = "hide_balance_style"
     }
@@ -33,11 +27,8 @@ public struct MousConfig: Codable, Equatable, Sendable {
         port: Int,
         databasePath: String,
         dev: Bool,
-        reportPeriod: String,
         theme: String,
         currency: String,
-        notifyInApp: Bool = true,
-        notifyMacOS: Bool = true,
         hideBalance: Bool = false,
         hideBalanceStyle: String = "scramble"
     ) {
@@ -45,11 +36,8 @@ public struct MousConfig: Codable, Equatable, Sendable {
         self.port = port
         self.databasePath = databasePath
         self.dev = dev
-        self.reportPeriod = reportPeriod
         self.theme = theme
         self.currency = currency
-        self.notifyInApp = notifyInApp
-        self.notifyMacOS = notifyMacOS
         self.hideBalance = hideBalance
         self.hideBalanceStyle = hideBalanceStyle
     }
@@ -60,28 +48,89 @@ public struct MousConfig: Codable, Equatable, Sendable {
         port = try container.decodeIfPresent(Int.self, forKey: .port) ?? 8000
         databasePath = try container.decodeIfPresent(String.self, forKey: .databasePath) ?? ""
         dev = try container.decodeIfPresent(Bool.self, forKey: .dev) ?? false
-        reportPeriod = try container.decodeIfPresent(String.self, forKey: .reportPeriod) ?? "14 days"
-        theme = try container.decodeIfPresent(String.self, forKey: .theme) ?? "system"
+        theme = try container.decodeIfPresent(String.self, forKey: .theme) ?? MousTheme.lime.rawValue
         currency = try container.decodeIfPresent(String.self, forKey: .currency) ?? "eur"
-        notifyInApp = try container.decodeIfPresent(Bool.self, forKey: .notifyInApp) ?? true
-        notifyMacOS = try container.decodeIfPresent(Bool.self, forKey: .notifyMacOS) ?? true
         hideBalance = try container.decodeIfPresent(Bool.self, forKey: .hideBalance) ?? false
         hideBalanceStyle = try container.decodeIfPresent(String.self, forKey: .hideBalanceStyle) ?? "scramble"
     }
 }
 
+/// One mark per theme in `macos/Mous/Icon`. White is the light card;
+/// the others are dark, and quieter than Leaf.
 public enum MousTheme: String, CaseIterable, Identifiable, Sendable {
-    case system
-    case light
-    case dark
+    case leaf
+    case pale
+    case lime
+    case mint
+    case sea
+    case clay
+    case white
 
     public var id: String { rawValue }
 
     public var label: String {
         switch self {
-        case .system: return "System"
-        case .light: return "Light"
-        case .dark: return "Dark"
+        case .leaf: return "Leaf"
+        case .pale: return "Pale"
+        case .lime: return "Lime"
+        case .mint: return "Mint"
+        case .sea: return "Sea"
+        case .clay: return "Clay"
+        case .white: return "White"
+        }
+    }
+
+    /// Raw transparent mark in slider order, matching the icon files.
+    public var iconFile: String {
+        switch self {
+        case .leaf: return "logo-variant"
+        case .pale: return "logo-variant-1"
+        case .lime: return "logo-variant-2"
+        case .mint: return "logo-variant-3"
+        case .sea: return "logo-variant-4"
+        case .clay: return "logo-variant-5"
+        case .white: return "logo-variant-6"
+        }
+    }
+
+    /// Sampled from the mark PNG. Leaf is the loudest dark accent;
+    /// the others stay softer against near-black cards.
+    public var markRGB: (red: Double, green: Double, blue: Double) {
+        switch self {
+        case .leaf: return (118.0 / 255, 178.0 / 255, 72.0 / 255)
+        case .pale: return (156.0 / 255, 160.0 / 255, 148.0 / 255)
+        case .lime: return (112.0 / 255, 168.0 / 255, 78.0 / 255)
+        case .mint: return (128.0 / 255, 168.0 / 255, 156.0 / 255)
+        case .sea: return (112.0 / 255, 156.0 / 255, 164.0 / 255)
+        case .clay: return (176.0 / 255, 140.0 / 255, 128.0 / 255)
+        case .white: return (72.0 / 255, 74.0 / 255, 78.0 / 255)
+        }
+    }
+
+    /// Quiet near-black card fills (screenshot charcoal ~32), each with a
+    /// faint theme hue. White stays warm paper.
+    public var canvasRGB: (red: Double, green: Double, blue: Double) {
+        switch self {
+        case .leaf: return (30.0 / 255, 34.0 / 255, 28.0 / 255)
+        case .pale: return (34.0 / 255, 34.0 / 255, 32.0 / 255)
+        case .lime: return (32.0 / 255, 32.0 / 255, 30.0 / 255)
+        case .mint: return (30.0 / 255, 34.0 / 255, 33.0 / 255)
+        case .sea: return (28.0 / 255, 32.0 / 255, 34.0 / 255)
+        case .clay: return (34.0 / 255, 30.0 / 255, 28.0 / 255)
+        case .white: return (247.0 / 255, 245.0 / 255, 241.0 / 255)
+        }
+    }
+
+    public static func parse(_ stored: String) -> MousTheme {
+        switch stored.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "leaf", "logo-variant": return .leaf
+        case "pale", "logo-variant-1": return .pale
+        case "lime", "logo-variant-2", "system", "light", "dark": return .lime
+        case "mint", "logo-variant-3": return .mint
+        case "sea", "logo-variant-4": return .sea
+        case "clay", "logo-variant-5": return .clay
+        case "white", "logo-variant-6": return .white
+        default: return .lime
         }
     }
 }
@@ -147,101 +196,6 @@ public enum HideBalanceStyle: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-/// How often / how far back `mous summary` looks. Maps to `report_period`.
-public enum ReportCadence: String, CaseIterable, Identifiable, Sendable {
-    case week
-    case twoWeeks
-    case month
-    case custom
-
-    public var id: String { rawValue }
-
-    public var label: String {
-        switch self {
-        case .week: return "Week"
-        case .twoWeeks: return "2 weeks"
-        case .month: return "Month"
-        case .custom: return "Custom"
-        }
-    }
-
-    /// Value written to `report_period`. `nil` for custom — keep the typed string.
-    public var storedValue: String? {
-        switch self {
-        case .week: return "week"
-        case .twoWeeks: return "2 weeks"
-        case .month: return "month"
-        case .custom: return nil
-        }
-    }
-
-    public static func classify(_ period: String) -> ReportCadence {
-        let folded = period.lowercased().filter { !$0.isWhitespace }
-        switch folded {
-        case "week", "1week", "1weeks", "7day", "7days", "w", "1w":
-            return .week
-        case "2weeks", "2week", "14days", "14day", "2w":
-            return .twoWeeks
-        case "month", "1month", "1months":
-            return .month
-        default:
-            return .custom
-        }
-    }
-
-    /// Same grammar as Python `parse_period`: `14 days`, `week`, `2 weeks`, `month`.
-    public static func isValidPeriod(_ text: String) -> Bool {
-        periodMatch(text) != nil
-    }
-
-    /// Civil date when the next report would land if this period starts today.
-    public static func nextReportDate(
-        period: String,
-        from: Date = Date(),
-        calendar: Calendar = .current
-    ) -> Date? {
-        guard let match = periodMatch(period) else { return nil }
-        let start = calendar.startOfDay(for: from)
-        switch match.unit {
-        case "d", "day", "days":
-            return calendar.date(byAdding: .day, value: match.count, to: start)
-        case "w", "week", "weeks":
-            return calendar.date(byAdding: .day, value: match.count * 7, to: start)
-        case "month", "months":
-            return calendar.date(byAdding: .month, value: match.count, to: start)
-        case "y", "year", "years":
-            return calendar.date(byAdding: .year, value: match.count, to: start)
-        default:
-            return nil
-        }
-    }
-
-    private static func periodMatch(_ text: String) -> (count: Int, unit: String)? {
-        let raw = text.split { $0.isWhitespace }.joined(separator: " ")
-        guard !raw.isEmpty else { return nil }
-        let range = NSRange(raw.startIndex..., in: raw)
-        guard let match = periodRegex.firstMatch(in: raw, range: range),
-              match.range.length == (raw as NSString).length
-        else { return nil }
-        let ns = raw as NSString
-        let countRange = match.range(at: 1)
-        var count = 1
-        if countRange.location != NSNotFound {
-            let countText = ns.substring(with: countRange)
-            guard let parsed = Int(countText), parsed >= 1 else { return nil }
-            count = parsed
-        }
-        let unitRange = match.range(at: 2)
-        guard unitRange.location != NSNotFound else { return nil }
-        return (count, ns.substring(with: unitRange).lowercased())
-    }
-
-    private static let periodRegex = try! NSRegularExpression(
-        pattern: "^(?:(\\d+)\\s*)?(days?|weeks?|months?|years?|[dwy])$",
-        options: .caseInsensitive
-    )
-}
-
 /// Read and write Application Support `mous/config.json` (or `MOUS_CONFIG_DIR`).
 public enum MousConfigFile {
     /// Tests replace this. `MOUS_CONFIG_DIR` also wins over Application Support.
@@ -261,14 +215,6 @@ public enum MousConfigFile {
         directory().appendingPathComponent("config.json")
     }
 
-    public static func summaryReportURL() -> URL {
-        directory().appendingPathComponent("summary_report.json")
-    }
-
-    public static func reportInboxURL() -> URL {
-        directory().appendingPathComponent("report_inbox.json")
-    }
-
     public static func defaults(in directory: URL? = nil) -> MousConfig {
         let dir = directory ?? Self.directory()
         return MousConfig(
@@ -276,8 +222,7 @@ public enum MousConfigFile {
             port: 8000,
             databasePath: dir.appendingPathComponent("data.db").path,
             dev: false,
-            reportPeriod: "14 days",
-            theme: "system",
+            theme: MousTheme.lime.rawValue,
             currency: "eur"
         )
     }
@@ -312,8 +257,8 @@ public enum MousConfigFile {
         }
         let cfg = load()
         let required = [
-            "host", "port", "database_path", "dev", "report_period", "theme", "currency",
-            "notify_in_app", "notify_macos", "hide_balance", "hide_balance_style",
+            "host", "port", "database_path", "dev", "theme", "currency",
+            "hide_balance", "hide_balance_style",
         ]
         if required.contains(where: { obj[$0] == nil }) {
             save(cfg)
@@ -329,9 +274,7 @@ public enum MousConfigFile {
         var cfg = config
         cfg.host = cfg.host.trimmingCharacters(in: .whitespacesAndNewlines)
         cfg.databasePath = cfg.databasePath.trimmingCharacters(in: .whitespacesAndNewlines)
-        cfg.reportPeriod = cfg.reportPeriod.split { $0.isWhitespace }.joined(separator: " ")
-        cfg.theme = cfg.theme.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if MousTheme(rawValue: cfg.theme) == nil { cfg.theme = "system" }
+        cfg.theme = MousTheme.parse(cfg.theme).rawValue
         cfg.currency = cfg.currency.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if cfg.currency.isEmpty { cfg.currency = "eur" }
         cfg.hideBalanceStyle = HideBalanceStyle.parse(cfg.hideBalanceStyle).rawValue
@@ -349,10 +292,7 @@ private extension MousConfig {
         var cfg = self
         let host = cfg.host.trimmingCharacters(in: .whitespacesAndNewlines)
         cfg.host = host.isEmpty ? "127.0.0.1" : host
-        let period = cfg.reportPeriod.split { $0.isWhitespace }.joined(separator: " ")
-        cfg.reportPeriod = period.isEmpty ? "14 days" : period
-        let theme = cfg.theme.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        cfg.theme = MousTheme(rawValue: theme)?.rawValue ?? "system"
+        cfg.theme = MousTheme.parse(cfg.theme).rawValue
         let currency = cfg.currency.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         cfg.currency = currency.isEmpty ? "eur" : currency
         cfg.hideBalanceStyle = HideBalanceStyle.parse(cfg.hideBalanceStyle).rawValue

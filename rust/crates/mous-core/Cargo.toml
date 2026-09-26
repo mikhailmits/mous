@@ -1,0 +1,11 @@
+[package]
+name = "mous-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+mous-proto = { workspace = true }
+rusqlite = { workspace = true }
+time = { workspace = true }
+libc = { workspace = true }

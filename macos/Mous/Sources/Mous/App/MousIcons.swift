@@ -1,4 +1,5 @@
 import AppKit
+import MousCore
 
 enum MousIcons {
     static let variantFileNames = [
@@ -8,6 +9,7 @@ enum MousIcons {
         "logo-variant-3",
         "logo-variant-4",
         "logo-variant-5",
+        "logo-variant-6",
     ]
 
     /// Canonical lime mark (`logo-variant-2`) used to sample the accent.
@@ -44,12 +46,54 @@ enum MousIcons {
         variantFileNames.compactMap { themed(named: $0, extensions: ["png"], isDark: isDark) }
     }
 
-    static func applyDockIcon(isDark: Bool) {
-        if let image = themed(named: "AppIcon", extensions: ["icns", "png"], isDark: isDark)
-            ?? themed(named: accentSourceName, extensions: ["png"], isDark: isDark)
-        {
-            NSApp.applicationIconImage = image
+    static func applyDockIcon(theme: MousTheme) {
+        guard let mark = image(named: theme.iconFile, extensions: ["png"]),
+              let icon = squircle(mark: mark, fill: theme.nsCanvas)
+        else { return }
+        NSApp.applicationIconImage = icon
+    }
+
+    static func previewImage(for theme: MousTheme) -> NSImage? {
+        image(named: theme.iconFile, extensions: ["png"])
+    }
+
+    /// Transparent outside a macOS-style squircle so the dock is not a rectangle.
+    static func squircle(mark: NSImage, fill: NSColor, side: CGFloat = 1024) -> NSImage? {
+        let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { rect in
+            NSColor.clear.setFill()
+            rect.fill()
+            let path = NSBezierPath(
+                roundedRect: rect,
+                xRadius: side * 0.2237,
+                yRadius: side * 0.2237
+            )
+            fill.setFill()
+            path.fill()
+            let maxWidth = side * 0.88
+            let maxHeight = side * 0.50
+            let aspect = mark.size.width / max(mark.size.height, 1)
+            var drawWidth = maxWidth
+            var drawHeight = drawWidth / aspect
+            if drawHeight > maxHeight {
+                drawHeight = maxHeight
+                drawWidth = drawHeight * aspect
+            }
+            // Soft left nudge: "mo" mass reads slightly right of geometric center.
+            let opticalNudge = side * -0.012
+            let origin = NSPoint(
+                x: (side - drawWidth) / 2 + opticalNudge,
+                y: (side - drawHeight) / 2
+            )
+            mark.draw(
+                in: NSRect(x: origin.x, y: origin.y, width: drawWidth, height: drawHeight),
+                from: .zero,
+                operation: .sourceOver,
+                fraction: 1
+            )
+            return true
         }
+        image.isTemplate = false
+        return image
     }
 
     static func sampledMarkColor() -> NSColor? {

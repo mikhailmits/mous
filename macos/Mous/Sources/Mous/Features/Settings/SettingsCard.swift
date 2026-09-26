@@ -5,33 +5,20 @@ struct SettingsCard: View {
     var onClose: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.mousAccent) private var mousAccent
     @State private var config: MousConfig
-    @State private var cadence: ReportCadence
-    @State private var customPeriod: String
     @State private var showAdvanced = false
-    @State private var customInvalid = false
-    @State private var scramblePreview = BalanceMask.make()
-    @State private var showNotifyGhost = false
-    @State private var didShowNotifyGhost = false
 
     init(onClose: @escaping () -> Void) {
         self.onClose = onClose
-        let loaded = MousConfigFile.ensure()
-        _config = State(initialValue: loaded)
-        _cadence = State(initialValue: ReportCadence.classify(loaded.reportPeriod))
-        _customPeriod = State(initialValue: loaded.reportPeriod)
+        _config = State(initialValue: MousConfigFile.ensure())
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 18) {
             header
             field("Theme.") {
-                SettingsChoiceBar(
-                    items: Array(MousTheme.allCases),
-                    title: \.label,
-                    selection: themeBinding,
-                    reduceMotion: reduceMotion
-                )
+                ThemeSlider(selection: themeBinding, reduceMotion: reduceMotion)
             }
             field("Currency.") {
                 SettingsChoiceBar(
@@ -44,48 +31,13 @@ struct SettingsCard: View {
             }
             field("Balance.") {
                 VStack(alignment: .leading, spacing: 8) {
-                    toggleRow("Hide balance", isOn: $config.hideBalance)
-                    hideBalancePreview
-                    if config.hideBalance {
-                        SettingsChoiceBar(
-                            items: Array(HideBalanceStyle.allCases),
-                            title: \.label,
-                            selection: hideStyleBinding,
-                            reduceMotion: reduceMotion
-                        )
-                        .transition(.opacity)
-                    }
-                }
-            }
-            field("Show reports every.") {
-                SettingsChoiceBar(
-                    items: Array(ReportCadence.allCases),
-                    title: \.label,
-                    selection: $cadence,
-                    reduceMotion: reduceMotion
-                )
-                if let caption = nextReportCaption {
-                    Text(caption)
+                    toggleRow("Hide balance", isOn: hideBalanceBinding)
+                    Text(config.hideBalance
+                        ? "Amounts become dots. Hold the eye on Spent today to peek."
+                        : "Turn this on to cover amounts. Hold the eye to peek.")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
-                        .monospacedDigit()
-                        .accessibilityLabel(caption)
-                }
-                if cadence == .custom {
-                    customPeriodField
-                        .transition(.opacity)
-                }
-            }
-            field("Notifications.") {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 6) {
-                        toggleRow("In-app inbox", isOn: $config.notifyInApp)
-                        toggleRow("Mac banners", isOn: $config.notifyMacOS)
-                    }
-                    if showNotifyGhost {
-                        notifyGhost
-                            .transition(.opacity)
-                    }
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             field("Updates.") {
@@ -97,33 +49,31 @@ struct SettingsCard: View {
         .frame(width: MousPopup.cardWidth, alignment: .topLeading)
         .mousCard()
         .onChange(of: config) { _, new in
-            MousConfigFile.save(new)
+            persist(new)
         }
         .onChange(of: config.theme) { _, new in
             MousAppearance.apply(new)
         }
-        .onChange(of: cadence) { _, new in
-            selectCadence(new)
+        .onDisappear {
+            persist(config)
         }
-        .onChange(of: config.notifyInApp) { wasOn, isOn in
-            previewNotifyIfNeeded(wasOn: wasOn, isOn: isOn)
-        }
-        .onChange(of: config.notifyMacOS) { wasOn, isOn in
-            previewNotifyIfNeeded(wasOn: wasOn, isOn: isOn)
-        }
-        .onChange(of: config.hideBalance) { _, on in
-            if on { scramblePreview = BalanceMask.make() }
-        }
-        .onChange(of: config.hideBalanceStyle) { _, _ in
-            scramblePreview = BalanceMask.make()
-        }
-        .animation(reduceMotion ? .easeOut(duration: 0.12) : .snappy(duration: 0.22), value: cadence)
-        .animation(reduceMotion ? .easeOut(duration: 0.12) : .snappy(duration: 0.22), value: showAdvanced)
-        .animation(reduceMotion ? .easeOut(duration: 0.12) : .snappy(duration: 0.22), value: config.hideBalance)
-        .animation(reduceMotion ? .easeOut(duration: 0.1) : .easeOut(duration: 0.18), value: showNotifyGhost)
+        .animation(MousMotion.spring(reduceMotion: reduceMotion), value: showAdvanced)
+        .animation(MousMotion.quick(reduceMotion: reduceMotion), value: config.hideBalance)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Settings")
         .accessibilityHint("Escape or Done returns to the dashboard.")
+    }
+
+    /// Write the whole struct so `@State` and `onChange(of: config)` always see a replace.
+    private func persist(_ value: MousConfig) {
+        MousConfigFile.save(value)
+    }
+
+    private func writeConfig(_ mutate: (inout MousConfig) -> Void) {
+        var next = config
+        mutate(&next)
+        guard next != config else { return }
+        config = next
     }
 
     private var header: some View {
@@ -133,7 +83,7 @@ struct SettingsCard: View {
             Spacer(minLength: 12)
             Button("Done", action: onClose)
                 .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(mousAccent)
                 .buttonStyle(.plain)
                 .help("Close settings")
         }
@@ -141,75 +91,65 @@ struct SettingsCard: View {
 
     private var themeBinding: Binding<MousTheme> {
         Binding(
-            get: { MousTheme(rawValue: config.theme) ?? .system },
-            set: { config.theme = $0.rawValue }
+            get: { MousTheme.parse(config.theme) },
+            set: { newValue in
+                writeConfig { $0.theme = newValue.rawValue }
+            }
         )
     }
 
     private var currencyBinding: Binding<MousCurrencyPref> {
         Binding(
-            get: { MousCurrencyPref(rawValue: config.currency) ?? .eur },
-            set: { config.currency = $0.rawValue }
+            get: { MousCurrencyPref.pref(for: config.currency) },
+            set: { newValue in
+                writeConfig { $0.currency = newValue.rawValue }
+            }
         )
     }
 
-    private var hideStyleBinding: Binding<HideBalanceStyle> {
+    private var hideBalanceBinding: Binding<Bool> {
         Binding(
-            get: { HideBalanceStyle.parse(config.hideBalanceStyle) },
-            set: { config.hideBalanceStyle = $0.rawValue }
+            get: { config.hideBalance },
+            set: { newValue in
+                writeConfig { $0.hideBalance = newValue }
+            }
         )
     }
 
-    private var hideStyle: HideBalanceStyle {
-        HideBalanceStyle.parse(config.hideBalanceStyle)
+    private var developerModeBinding: Binding<Bool> {
+        Binding(
+            get: { config.dev },
+            set: { newValue in
+                writeConfig { $0.dev = newValue }
+            }
+        )
     }
 
-    private var hideBalancePreview: some View {
-        let masked: String = {
-            if config.hideBalance, hideStyle == .scramble {
-                return scramblePreview
+    private var hostBinding: Binding<String> {
+        Binding(
+            get: { config.host },
+            set: { newValue in
+                writeConfig { $0.host = newValue }
             }
-            return BalanceMask.veil(length: 4)
-        }()
-        return Text("\(Self.fakeBalance) → \(masked)")
-            .font(.caption.monospacedDigit())
-            .foregroundStyle(config.hideBalance ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary))
-            .accessibilityLabel(config.hideBalance ? "Balance hidden, preview" : "Preview: 12,480 dollars becomes hidden")
+        )
     }
 
-    @ViewBuilder
-    private var customPeriodField: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            TextField("3 weeks", text: $customPeriod)
-                .textFieldStyle(.plain)
-                .font(.callout.monospacedDigit())
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
-                .background(trackFill)
-                .autocorrectionDisabled()
-                .onChange(of: customPeriod) { _, new in
-                    commitCustomPeriod(new)
-                }
-            if customInvalid {
-                Text("Try 3 weeks, 1 month, or 14 days.")
-                    .font(.caption)
-                    .foregroundStyle(.orange.opacity(0.9))
+    private var portBinding: Binding<Int> {
+        Binding(
+            get: { config.port },
+            set: { newValue in
+                writeConfig { $0.port = newValue }
             }
-        }
+        )
     }
 
-    private var nextReportCaption: String? {
-        if cadence == .custom {
-            let trimmed = customPeriod.split { $0.isWhitespace }.joined(separator: " ")
-            if trimmed.isEmpty { return nil }
-            if customInvalid || !ReportCadence.isValidPeriod(trimmed) {
-                return "Fix the period"
+    private var databasePathBinding: Binding<String> {
+        Binding(
+            get: { config.databasePath },
+            set: { newValue in
+                writeConfig { $0.databasePath = newValue }
             }
-        }
-        guard let date = ReportCadence.nextReportDate(period: config.reportPeriod) else {
-            return nil
-        }
-        return "Next: \(formatNext(date))"
+        )
     }
 
     private var advancedSection: some View {
@@ -239,7 +179,7 @@ struct SettingsCard: View {
                 VStack(alignment: .leading, spacing: 14) {
                     HStack(alignment: .top, spacing: 10) {
                         field("Host.") {
-                            TextField("127.0.0.1", text: $config.host)
+                            TextField("127.0.0.1", text: hostBinding)
                                 .textFieldStyle(.plain)
                                 .font(.callout)
                                 .padding(.horizontal, 12)
@@ -248,7 +188,7 @@ struct SettingsCard: View {
                                 .autocorrectionDisabled()
                         }
                         field("Port.") {
-                            TextField("8000", value: $config.port, format: .number.grouping(.never))
+                            TextField("8000", value: portBinding, format: .number.grouping(.never))
                                 .textFieldStyle(.plain)
                                 .font(.callout)
                                 .multilineTextAlignment(.center)
@@ -259,7 +199,7 @@ struct SettingsCard: View {
                         .frame(width: 108)
                     }
                     field("Database.") {
-                        TextField("Path", text: $config.databasePath)
+                        TextField("Path", text: databasePathBinding)
                             .textFieldStyle(.plain)
                             .font(.system(size: 12, design: .monospaced))
                             .foregroundStyle(.secondary)
@@ -269,39 +209,20 @@ struct SettingsCard: View {
                             .background(trackFill)
                             .autocorrectionDisabled()
                     }
-                    toggleRow("Developer mode", isOn: $config.dev)
+                    toggleRow("Developer mode", isOn: developerModeBinding)
                     Text("Host, port, and database apply the next time mous starts.")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .transition(.opacity)
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
     }
 
-    private var notifyGhost: some View {
-        HStack(spacing: 6) {
-            Text("Mous")
-                .fontWeight(.semibold)
-            Text("•")
-            Text("Report ready")
-        }
-        .font(.system(size: 12, weight: .medium, design: .rounded))
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(.background.opacity(0.94))
-                .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
-        }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-
     private var trackFill: some View {
         RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(Color.primary.opacity(0.055))
+            .fill(Color.white.opacity(0.06))
     }
 
     private func toggleRow(_ title: String, isOn: Binding<Bool>) -> some View {
@@ -331,7 +252,7 @@ struct SettingsCard: View {
         .accessibilityAddTraits(.isToggle)
         .accessibilityValue(isOn.wrappedValue ? "On" : "Off")
         .help(title == "Hide balance"
-            ? "Hides spent, left, history, and most-expensive amounts."
+            ? "Covers spent, left, history, and most-expensive amounts. Hold the eye to peek."
             : title)
     }
 
@@ -343,51 +264,109 @@ struct SettingsCard: View {
             content()
         }
     }
+}
 
-    private func selectCadence(_ option: ReportCadence) {
-        customInvalid = false
-        if let stored = option.storedValue {
-            config.reportPeriod = stored
-            customPeriod = stored
-        } else if ReportCadence.classify(config.reportPeriod) != .custom {
-            customPeriod = config.reportPeriod
+/// Drag across the row like a slider, or tap a swatch. Selected tile keeps a thin ring.
+private struct ThemeSlider: View {
+    @Binding var selection: MousTheme
+    var reduceMotion: Bool
+    @Environment(\.mousAccent) private var mousAccent
+
+    private static let swatchGap: CGFloat = 4
+    private static let swatchHeight: CGFloat = 72
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            GeometryReader { proxy in
+                let themes = Array(MousTheme.allCases)
+                let width = proxy.size.width
+                HStack(spacing: Self.swatchGap) {
+                    ForEach(themes) { theme in
+                        swatch(theme, selected: theme == selection)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: Self.swatchHeight)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .highPriorityGesture(
+                    DragGesture(minimumDistance: 4)
+                        .onChanged { value in
+                            guard let next = Self.theme(
+                                at: value.location.x,
+                                width: width,
+                                themes: themes
+                            ), next != selection else { return }
+                            selection = next
+                        }
+                )
+            }
+            .frame(height: Self.swatchHeight)
+            // Nudge the row a touch wider than the field labels above.
+            .padding(.horizontal, -4)
+            Text(selection.label)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(mousAccent)
+                .contentTransition(.interpolate)
+        }
+        .animation(MousMotion.spring(reduceMotion: reduceMotion), value: selection)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Theme")
+        .accessibilityValue(selection.label)
+        .accessibilityAdjustableAction { direction in
+            let themes = Array(MousTheme.allCases)
+            guard let index = themes.firstIndex(of: selection) else { return }
+            switch direction {
+            case .increment:
+                selection = themes[min(index + 1, themes.count - 1)]
+            case .decrement:
+                selection = themes[max(index - 1, 0)]
+            @unknown default:
+                break
+            }
         }
     }
 
-    private func commitCustomPeriod(_ text: String) {
-        guard cadence == .custom else { return }
-        let trimmed = text.split { $0.isWhitespace }.joined(separator: " ")
-        if trimmed.isEmpty {
-            customInvalid = false
-            return
-        }
-        if ReportCadence.isValidPeriod(trimmed) {
-            customInvalid = false
-            config.reportPeriod = trimmed
-        } else {
-            customInvalid = true
-        }
+    /// Map drag x onto swatch cells, accounting for the fixed gaps between them.
+    static func theme(at x: CGFloat, width: CGFloat, themes: [MousTheme]) -> MousTheme? {
+        let count = themes.count
+        guard count > 0, width > 0 else { return nil }
+        let gaps = Self.swatchGap * CGFloat(count - 1)
+        let cellWidth = (width - gaps) / CGFloat(count)
+        guard cellWidth > 0 else { return nil }
+        let slot = cellWidth + Self.swatchGap
+        let clamped = min(max(x, 0), width - 0.001)
+        let index = min(count - 1, max(0, Int(clamped / slot)))
+        return themes[index]
     }
 
-    private func previewNotifyIfNeeded(wasOn: Bool, isOn: Bool) {
-        guard isOn, !wasOn, !didShowNotifyGhost else { return }
-        didShowNotifyGhost = true
-        showNotifyGhost = true
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(1200))
-            showNotifyGhost = false
+    private func swatch(_ theme: MousTheme, selected: Bool) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        return ZStack {
+            shape.fill(theme.canvas)
+            if let image = MousIcons.previewImage(for: theme) {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    // Match AppIcon optical nudge (~1% of the tile).
+                    .offset(x: -1)
+                    .padding(selected ? 4 : 6)
+            }
         }
-    }
-
-    private func formatNext(_ date: Date) -> String {
-        let calendar = Calendar.current
-        if calendar.component(.year, from: date) != calendar.component(.year, from: Date()) {
-            return date.formatted(.dateTime.month(.abbreviated).day().year())
+        .overlay {
+            shape.strokeBorder(
+                selected ? theme.mark : Color.clear,
+                lineWidth: selected ? 2 : 0
+            )
         }
-        return date.formatted(.dateTime.month(.abbreviated).day())
+        .scaleEffect(selected ? 1 : 0.97)
+        .contentShape(shape)
+        .onTapGesture { selection = theme }
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : [.isButton])
+        .accessibilityLabel(theme.label)
+        .accessibilityIdentifier(theme.label)
     }
-
-    private static let fakeBalance = "$12,480.00"
 }
 
 private struct SettingsChoiceBar<Item: Hashable & Identifiable>: View {
@@ -407,12 +386,12 @@ private struct SettingsChoiceBar<Item: Hashable & Identifiable>: View {
                 Button {
                     selection = item
                 } label: {
-                    VStack(spacing: 1) {
+                    HStack(spacing: 4) {
                         Text(label)
                         if let glyph, !glyph.isEmpty {
                             Text(glyph)
-                                .font(.system(size: 10, weight: .semibold, design: .rounded))
-                                .opacity(selected ? 0.9 : 0.45)
+                                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                .opacity(selected ? 0.85 : 0.5)
                                 .accessibilityHidden(true)
                         }
                     }
@@ -421,18 +400,13 @@ private struct SettingsChoiceBar<Item: Hashable & Identifiable>: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, glyph == nil ? 7 : 5)
+                    .padding(.vertical, 7)
                     .contentShape(Rectangle())
                     .background {
                         if selected {
-                            if reduceMotion {
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(Color.primary.opacity(0.12))
-                            } else {
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(Color.primary.opacity(0.12))
-                                    .matchedGeometryEffect(id: "pill", in: pill)
-                            }
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color.white.opacity(0.12))
+                                .matchedGeometryEffect(id: "pill", in: pill)
                         }
                     }
                 }
@@ -446,9 +420,9 @@ private struct SettingsChoiceBar<Item: Hashable & Identifiable>: View {
         .padding(3)
         .background {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.primary.opacity(0.055))
+                .fill(Color.white.opacity(0.06))
         }
-        .animation(reduceMotion ? .easeOut(duration: 0.1) : .snappy(duration: 0.22), value: selection)
+        .animation(MousMotion.quick(reduceMotion: reduceMotion), value: selection)
     }
 }
 
@@ -456,5 +430,6 @@ private struct SettingsChoiceChipStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .opacity(configuration.isPressed ? 0.7 : 1)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
     }
 }

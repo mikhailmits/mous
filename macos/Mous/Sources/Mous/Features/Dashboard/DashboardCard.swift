@@ -9,7 +9,6 @@ final class CommandHintState {
     /// In-place list replacing the dashboard. `nil` is the normal home view.
     var focusedList: DashboardTipKind? = nil
     var showSettings = false
-    var showNotifications = false
     var showOptionsMenu = false
 }
 
@@ -22,29 +21,46 @@ struct DashboardCard: View {
     /// ISO 4217 code for the Settings currency.
     var currencyCode: String
     var hideBalance: Bool = false
+    var onToggleHide: () -> Void = {}
+    var onPeek: (Bool) -> Void = { _ in }
     var onSpendHover: (Bool) -> Void = { _ in }
     var onSavedHover: (Bool) -> Void = { _ in }
     var showCommandHints: Bool = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.mousAccent) private var mousAccent
     @State private var spendHotspot: CGRect = .zero
-    @State private var spentTodayMask = BalanceMask.make()
-    @State private var leftMask = BalanceMask.make()
-    @State private var spentMonthMask = BalanceMask.make()
-    @State private var lastTick: TickToken?
+    @State private var eyeAnchor: CGRect = .zero
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Spent today.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .mousTick(numeric: false, reduceMotion: reduceMotion)
-                    .spendHotspot()
+                HStack(spacing: 6) {
+                    Text("Spent today.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .mousTick(numeric: false, reduceMotion: reduceMotion)
+                    // Layout only — the interactive eye is overlaid above the
+                    // History hover catcher so peek/toggle clicks are not stolen.
+                    Color.clear
+                        .frame(width: 22, height: 22)
+                        .accessibilityHidden(true)
+                        .background {
+                            GeometryReader { proxy in
+                                Color.clear.preference(
+                                    key: EyeAnchorKey.self,
+                                    value: proxy.frame(in: .named("spendHotspot"))
+                                )
+                            }
+                        }
+                }
+                .spendHotspot()
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     heroValue
                         .spendHotspot()
                     leftLabel
+                        .layoutPriority(1)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                 }
             }
             HStack(alignment: .firstTextBaseline) {
@@ -58,6 +74,8 @@ struct DashboardCard: View {
                 .spendHotspot()
                 Spacer(minLength: 12)
                 savedLabel
+                    .fixedSize(horizontal: true, vertical: false)
+                    .layoutPriority(1)
                     .contentShape(Rectangle())
                     .onHover { onSavedHover($0) }
             }
@@ -76,6 +94,7 @@ struct DashboardCard: View {
             let box = rects.reduce(CGRect.null) { $0.union($1) }
             spendHotspot = box.isNull ? .zero : box.insetBy(dx: -8, dy: -6)
         }
+        .onPreferenceChange(EyeAnchorKey.self) { eyeAnchor = $0 }
         .overlay(alignment: .topLeading) {
             Rectangle()
                 .fill(Color.clear)
@@ -83,6 +102,13 @@ struct DashboardCard: View {
                 .offset(x: spendHotspot.minX, y: spendHotspot.minY)
                 .contentShape(Rectangle())
                 .onHover { onSpendHover($0) }
+        }
+        // Real control on top of the History hover catcher (placeholder eye below).
+        .overlay(alignment: .topLeading) {
+            BalanceEye(hidden: hideBalance, onToggle: onToggleHide, onPeek: onPeek)
+                .offset(x: eyeAnchor.minX, y: eyeAnchor.minY)
+                .opacity(eyeAnchor.width > 0 ? 1 : 0)
+                .allowsHitTesting(eyeAnchor.width > 0)
         }
         .padding(20)
         .overlay(alignment: .topLeading) {
@@ -97,27 +123,11 @@ struct DashboardCard: View {
         .mousCard()
         .redacted(reason: isRefreshing && !hasLoaded ? .placeholder : [])
         .animation(tickAnimation, value: tickToken)
-        .onAppear {
-            if lastTick == nil { lastTick = tickToken }
-            if hideBalance { reshuffleMasks() }
-        }
-        .onChange(of: hideBalance) { _, on in
-            if on { reshuffleMasks() }
-        }
-        .onChange(of: displayedSpentToday) { _, _ in
-            if hideBalance { spentTodayMask = freshMask() }
-        }
-        .onChange(of: snapshot.left) { _, _ in
-            if hideBalance { leftMask = freshMask() }
-        }
-        .onChange(of: displayedSpentMonth) { _, _ in
-            if hideBalance { spentMonthMask = freshMask() }
-        }
-        .onChange(of: tickToken) { _, new in
-            lastTick = new
-        }
-        .accessibilityElement(children: .ignore)
+        .animation(MousMotion.quick(reduceMotion: reduceMotion), value: hideBalance)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel(accessibilityText)
+        .accessibilityIdentifier("Spent today")
+        .accessibilityValue(hideBalance ? Self.heroDots : displayedSpentToday.formatted(money))
         .accessibilityHint("Command M shows History. Command X shows Most expensive. Command F expands an open list.")
     }
 
@@ -147,31 +157,12 @@ struct DashboardCard: View {
     }
 
     private var tickAnimation: Animation {
-        if reduceMotion { return .easeOut(duration: 0.15) }
-        return .snappy(duration: Self.snappyDuration(from: lastTick, to: tickToken))
-    }
-
-    private static func snappyDuration(from old: TickToken?, to new: TickToken) -> Double {
-        guard let old else { return 0.28 }
-        let delta = max(
-            abs(new.spentToday - old.spentToday),
-            abs(new.left - old.left),
-            abs(new.spentMonth - old.spentMonth)
-        )
-        if delta < 0.005 { return 0.22 }
-        let scale = max(
-            abs(old.left), abs(new.left),
-            abs(old.spentMonth), abs(new.spentMonth),
-            abs(old.spentToday), abs(new.spentToday),
-            25
-        )
-        let mag = min(1, delta / scale)
-        return min(0.6, 0.22 + mag * 0.38)
+        MousMotion.tick(reduceMotion: reduceMotion)
     }
 
     @ViewBuilder
     private var heroValue: some View {
-        Text(hideBalance ? spentTodayMask : displayedSpentToday.formatted(money))
+        Text(hideBalance ? Self.heroDots : displayedSpentToday.formatted(money))
             .font(.system(size: 34, weight: .semibold, design: .rounded))
             .monospacedDigit()
             .foregroundStyle(.primary)
@@ -190,7 +181,7 @@ struct DashboardCard: View {
     private var leftLabel: some View {
         // Bold rounded weight keeps the sampled mark color readable
         // against the material at the themed opacity.
-        Text(hideBalance ? "\(leftMask) left" : "\(hasLoaded ? snapshot.left : 0, format: money) left")
+        Text(hideBalance ? "\(Self.sideDots) left" : "\(hasLoaded ? snapshot.left : 0, format: money) left")
             .font(.system(size: 15, weight: .bold, design: .rounded))
             .foregroundStyle(mousAccent)
             .monospacedDigit()
@@ -206,7 +197,7 @@ struct DashboardCard: View {
     @ViewBuilder
     private var monthValue: some View {
         // Secondary tier: quieter than the hero, still legible as an amount.
-        Text(hideBalance ? spentMonthMask : displayedSpentMonth.formatted(money))
+        Text(hideBalance ? Self.sideDots : displayedSpentMonth.formatted(money))
             .font(.callout.weight(.medium))
             .foregroundStyle(.secondary)
             .monospacedDigit()
@@ -241,9 +232,9 @@ struct DashboardCard: View {
             }
             return text
         }
-        let today = hideBalance ? spentTodayMask : displayedSpentToday.formatted(money)
-        let left = hideBalance ? leftMask : snapshot.left.formatted(money)
-        let month = hideBalance ? spentMonthMask : displayedSpentMonth.formatted(money)
+        let today = hideBalance ? Self.heroDots : displayedSpentToday.formatted(money)
+        let left = hideBalance ? Self.sideDots : snapshot.left.formatted(money)
+        let month = hideBalance ? Self.sideDots : displayedSpentMonth.formatted(money)
         let saved: String
         if let ratio = snapshot.savedRatio {
             saved = ratio.formatted(Self.percent)
@@ -257,20 +248,8 @@ struct DashboardCard: View {
         return text
     }
 
-    private func reshuffleMasks() {
-        let style = hideStyle
-        spentTodayMask = BalanceMask.make(style: style)
-        leftMask = BalanceMask.make(style: style)
-        spentMonthMask = BalanceMask.make(style: style)
-    }
-
-    private func freshMask() -> String {
-        BalanceMask.make(style: hideStyle)
-    }
-
-    private var hideStyle: HideBalanceStyle {
-        HideBalanceStyle.parse(MousConfigFile.load().hideBalanceStyle)
-    }
+    private static let heroDots = BalanceMask.veil(length: 6)
+    private static let sideDots = BalanceMask.veil(length: 4)
 
     private var money: FloatingPointFormatStyle<Double>.Currency {
         FloatingPointFormatStyle<Double>.Currency(code: currencyCode)
@@ -279,6 +258,150 @@ struct DashboardCard: View {
 
     private static let percent = FloatingPointFormatStyle<Double>.Percent()
         .precision(.fractionLength(0))
+}
+
+/// Click toggles hide. A longer press, while hidden, peeks until release.
+private struct BalanceEye: View {
+    var hidden: Bool
+    var onToggle: () -> Void
+    var onPeek: (Bool) -> Void
+    @Environment(\.mousAccent) private var mousAccent
+    @State private var hovering = false
+
+    var body: some View {
+        Image(systemName: hidden ? "eye.slash" : "eye")
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(hovering ? AnyShapeStyle(mousAccent) : AnyShapeStyle(.secondary))
+            .frame(width: 22, height: 22)
+            .background {
+                Circle().fill(Color.white.opacity(hovering ? 0.10 : 0.05))
+            }
+            .overlay {
+                HoldEye(hidden: hidden, onToggle: onToggle, onPeek: onPeek, onHover: { hovering = $0 })
+            }
+            .help(hidden ? "Hold to peek. Click to show amounts." : "Hide amounts")
+            .accessibilityLabel("Hide balance")
+            .accessibilityIdentifier("Hide balance")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityValue(hidden ? "On" : "Off")
+            .accessibilityHint("Hides amounts. Hold to peek while they are hidden.")
+            .accessibilityAction(.default) { onToggle() }
+    }
+}
+
+private struct HoldEye: NSViewRepresentable {
+    var hidden: Bool
+    var onToggle: () -> Void
+    var onPeek: (Bool) -> Void
+    var onHover: (Bool) -> Void
+
+    func makeNSView(context: Context) -> HoldEyeView {
+        let view = HoldEyeView()
+        view.onToggle = onToggle
+        view.onPeek = onPeek
+        view.onHover = onHover
+        view.amountsHidden = hidden
+        return view
+    }
+
+    func updateNSView(_ view: HoldEyeView, context: Context) {
+        view.onToggle = onToggle
+        view.onPeek = onPeek
+        view.onHover = onHover
+        view.amountsHidden = hidden
+    }
+}
+
+private final class HoldEyeView: NSView {
+    var amountsHidden = false
+    var onToggle: () -> Void = {}
+    var onPeek: (Bool) -> Void = { _ in }
+    var onHover: (Bool) -> Void = { _ in }
+    private var tracking: NSTrackingArea?
+    private var downAt = Date()
+    private var peeking = false
+    private var pressActive = false
+    private var upMonitor: Any?
+
+    override var isOpaque: Bool { false }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { nil }
+
+    deinit {
+        stopUpMonitor()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        tracking = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { onHover(true) }
+    override func mouseExited(with event: NSEvent) { onHover(false) }
+
+    override func mouseDown(with event: NSEvent) {
+        downAt = Date()
+        pressActive = true
+        peeking = amountsHidden
+        if peeking { onPeek(true) }
+        // Local monitor so releasing outside the eye still ends peek
+        // without a tracking loop that would block SwiftUI from revealing.
+        if upMonitor == nil {
+            upMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { [weak self] up in
+                self?.finishPress(with: up)
+                return up
+            }
+        }
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        finishPress(with: event)
+    }
+
+    private func finishPress(with event: NSEvent) {
+        guard pressActive else { return }
+        pressActive = false
+        // Removing a local monitor inside its own handler can crash.
+        stopUpMonitor()
+        endPeek()
+        let loc = convert(event.locationInWindow, from: nil)
+        guard bounds.contains(loc) else { return }
+        if Date().timeIntervalSince(downAt) < 0.35 {
+            onToggle()
+        }
+    }
+
+    private func stopUpMonitor() {
+        guard let monitor = upMonitor else { return }
+        upMonitor = nil
+        DispatchQueue.main.async {
+            NSEvent.removeMonitor(monitor)
+        }
+    }
+
+    private func endPeek() {
+        guard peeking else { return }
+        peeking = false
+        onPeek(false)
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func becomeFirstResponder() -> Bool { false }
 }
 
 struct CommandKeycap: View {
@@ -307,7 +430,7 @@ struct CommandKeycap: View {
         .opacity(visible ? 1 : 0)
         .scaleEffect(visible || reduceMotion ? 1 : 0.86)
         .animation(
-            reduceMotion ? .easeOut(duration: 0.12) : .snappy(duration: 0.22),
+            MousMotion.quick(reduceMotion: reduceMotion),
             value: visible
         )
         .allowsHitTesting(false)
@@ -320,6 +443,14 @@ private struct SpendHotspotKey: PreferenceKey {
     static let defaultValue: [CGRect] = []
     static func reduce(value: inout [CGRect], nextValue: () -> [CGRect]) {
         value.append(contentsOf: nextValue())
+    }
+}
+
+private struct EyeAnchorKey: PreferenceKey {
+    static let defaultValue: CGRect = .zero
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        let next = nextValue()
+        if next.width > 0 { value = next }
     }
 }
 

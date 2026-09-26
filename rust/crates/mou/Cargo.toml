@@ -1,0 +1,16 @@
+[package]
+name = "mou"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "mou"
+path = "src/main.rs"
+
+[dependencies]
+mous-proto = { workspace = true }
+clap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }

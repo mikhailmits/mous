@@ -1,4 +1,4 @@
-"""Hide balance: Settings toggle + glyphs on the popup; API stays numeric."""
+"""Hide balance: Settings toggle + veil dots on the popup; API stays numeric."""
 
 from __future__ import annotations
 
@@ -6,10 +6,10 @@ import re
 import time
 from pathlib import Path
 
-from e2e_mous.ax import ax_has, ax_tree_text, click_until_config, send_keys
+from e2e_mous.ax import ax_tree_text, click_until_config, send_keys
 from e2e_mous.harness import expect, read_config, request, write_config_dict
 
-MASK_RE = re.compile(r"[?#*!]{4,}")
+MASK_RE = re.compile(r"(?:[?#*!•]{4,})")
 
 
 def run_http(directory: Path) -> None:
@@ -68,17 +68,15 @@ def run_ui(pid: int, directory: Path, notes: list[str]) -> None:
     cfg = read_config(directory)
     if "hide_balance_style" in cfg:
         expect(cfg.get("hide_balance_style") == "scramble", "hide_balance_style stays scramble")
-    if ax_has(pid, "Dots") or ax_has(pid, "Scramble") or ax_has(pid, "Veil"):
-        notes.append("hide balance style chips")
     send_keys("esc", pid=pid)
-    time.sleep(0.5)
+    time.sleep(0.25)
     hay = ax_tree_text(pid)
-    if MASK_RE.search(hay):
-        notes.append("dashboard shows masked balance")
+    if MASK_RE.search(hay) or "••••" in hay:
+        notes.append("dashboard shows steady dots")
     else:
-        notes.append("WARN: masked glyphs not in AX tree")
+        notes.append("WARN: hidden amounts not in AX tree")
     send_keys("s", command=True, pid=pid)
-    time.sleep(0.8)
+    time.sleep(0.25)
     if not click_until_config(pid, "Hide balance", directory, "hide_balance", False, toggle=True):
         notes.append("WARN: hide balance stayed on")
         return

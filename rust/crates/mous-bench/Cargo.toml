@@ -1,0 +1,12 @@
+[package]
+name = "mous-bench"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "mous-bench"
+path = "src/main.rs"
+
+[dependencies]
+mous-proto = { workspace = true }

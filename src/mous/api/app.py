@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import os
 import sys
 from collections.abc import AsyncIterator
@@ -48,18 +47,9 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     from mous.db.utils import ensure_defaults
 
     await ensure_defaults()
-    from mous.services.report import run_summary_schedule, summary_report
-
-    _app.state.summary_report = summary_report
-    poll = asyncio.create_task(run_summary_schedule(summary_report), name="mous-summary-report")
     try:
         yield
     finally:
-        poll.cancel()
-        try:
-            await poll
-        except asyncio.CancelledError:
-            pass
         await db.close()
 
 

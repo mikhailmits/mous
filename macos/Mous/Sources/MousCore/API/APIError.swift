@@ -11,14 +11,19 @@ public enum APIError: Error, Equatable, Sendable {
         switch self {
         case .transport, .timeout, .undecodable:
             return "Can't reach mous"
-        case .server:
+        case .server(let status, _, _):
+            // Conflict, validation, and timeout are not a safe automatic retry.
+            // A timed-out POST may already have been saved.
+            if status == 408 || status == 409 || status == 422 {
+                return "Couldn't save"
+            }
             return "Couldn't save — Return to retry"
         case .missingMainAccount:
             return "Can't load totals"
         }
     }
 
-    /// Connection failed; keep retrying. Server/validation errors are not this.
+    /// Connection failed; keep retrying. 409/422/5xx `.server` and decode errors are not this.
     public var isUnreachable: Bool {
         switch self {
         case .transport, .timeout:
