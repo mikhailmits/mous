@@ -1,0 +1,654 @@
+{
+  "model": "google/gemini-2.5-flash",
+  "codecs": [
+    "img_2tile_compact",
+    "img_4col_1bit",
+    "img_monthly_table",
+    "img_summary_card"
+  ],
+  "results": [
+    {
+      "model": "google/gemini-2.5-flash",
+      "codec": "img_monthly_table",
+      "task": "reports",
+      "ok": true,
+      "accuracy": 1.0,
+      "passed": 5,
+      "total": 5,
+      "checks": {
+        "n_transactions": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 1000.0,
+          "pred": 1000.0
+        },
+        "total_income": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 90564.2,
+          "pred": 90564.2
+        },
+        "total_expense": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 75572.82,
+          "pred": 75572.82
+        },
+        "net": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 14991.38,
+          "pred": 14991.38
+        },
+        "top_category": {
+          "ok": true,
+          "gold": "rent",
+          "pred": "rent"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 1579,
+        "completion_tokens": 204,
+        "total_tokens": 1783,
+        "cost": 0.0009837,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0009837,
+          "upstream_inference_prompt_cost": 0.0004737,
+          "upstream_inference_completions_cost": 0.00051
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      },
+      "preview": "{\"reports\": {\"n_transactions\": 1000, \"n_income\": 58, \"n_expense\": 942, \"total_income\": 90564.20, \"total_expense\": 75572.82, \"net\": 14991.38, \"top_category_by_spend\": \"rent\", \"top_category_spend\": 22703.20, \"top5_categories\": [{\"category\": \"rent\", \"spend\": 22703.20}, {\"category\": \"shopping\", \"spend\": 9175.33}, {\"category\": \"groceries\", \"spend\": 9141.71}, {\"category\": \"travel\", \"spend\": 8309.94}, {\"category\": \"restaurants\", \"spend\": 6242.68}]}}"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "codec": "img_monthly_table",
+      "task": "optimize",
+      "ok": true,
+      "accuracy": 1.0,
+      "passed": 2,
+      "total": 2,
+      "checks": {
+        "discretionary_share": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 28281.19,
+          "pred": 28281.19
+        },
+        "best_cut_category": {
+          "ok": true,
+          "gold": "shopping",
+          "pred": "shopping"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 1625,
+        "completion_tokens": 160,
+        "total_tokens": 1785,
+        "cost": 0.0008875,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0008875,
+          "upstream_inference_prompt_cost": 0.0004875,
+          "upstream_inference_completions_cost": 0.0004
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      },
+      "preview": "```json\n{\n  \"optimize\": {\n    \"best_single_cut\": {\n      \"category\": \"shopping\",\n      \"spend\": 9175.33,\n      \"cut_20pct_saves\": 1835.07\n    },\n    \"discretionary_share\": 28281.19,\n    \"subscription_annual_cost\": 16046.16,\n    \"playbook\": [\n      \"Review shopping expenses, as it is your highest discretionary spend.\",\n      \"Consider reducing spending on travel and restaurants.\",\n      \"Evaluate all subscriptions to ensure they are still needed and used.\"\n    ]\n  }\n}\n```"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "codec": "img_monthly_table",
+      "task": "forecasts",
+      "ok": true,
+      "accuracy": 1.0,
+      "passed": 2,
+      "total": 2,
+      "checks": {
+        "next_month_spend": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 2888.14,
+          "pred": 2888.14
+        },
+        "next_month_income": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 4581.06,
+          "pred": 4581.06
+        }
+      },
+      "usage": {
+        "prompt_tokens": 1562,
+        "completion_tokens": 96,
+        "total_tokens": 1658,
+        "cost": 0.0007086,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0007086,
+          "upstream_inference_prompt_cost": 0.0004686,
+          "upstream_inference_completions_cost": 0.00024
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      },
+      "preview": "{\"forecasts\": {\"avg_monthly_spend_last3\": 2888.14, \"avg_monthly_income_last3\": 4581.06, \"next_month_spend_naive\": 2888.14, \"next_month_income_naive\": 4581.06, \"next_month_net_naive\": 1692.92}}"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "codec": "img_summary_card",
+      "task": "reports",
+      "ok": true,
+      "accuracy": 1.0,
+      "passed": 5,
+      "total": 5,
+      "checks": {
+        "n_transactions": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 1000.0,
+          "pred": 1000.0
+        },
+        "total_income": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 90564.2,
+          "pred": 90564.2
+        },
+        "total_expense": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 75572.82,
+          "pred": 75572.82
+        },
+        "net": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 14991.38,
+          "pred": 14991.38
+        },
+        "top_category": {
+          "ok": true,
+          "gold": "rent",
+          "pred": "rent"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 1784,
+        "completion_tokens": 161,
+        "total_tokens": 1945,
+        "cost": 0.0009377,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0009377,
+          "upstream_inference_prompt_cost": 0.0005352,
+          "upstream_inference_completions_cost": 0.0004025
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      },
+      "preview": "{\"reports\": {\"n_transactions\": 1000, \"n_income\": null, \"n_expense\": null, \"total_income\": 90564.2, \"total_expense\": 75572.82, \"net\": 14991.38, \"top_category_by_spend\": \"rent\", \"top_category_spend\": 22703.2, \"top5_categories\": [{\"category\": \"rent\", \"spend\": 22703.2}, {\"category\": \"fo\", \"spend\": 2888.14}, {\"category\": \"diso\", \"spend\": 28281.18}]}}"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "codec": "img_summary_card",
+      "task": "optimize",
+      "ok": true,
+      "accuracy": 0.5,
+      "passed": 1,
+      "total": 2,
+      "checks": {
+        "discretionary_share": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 28281.19,
+          "pred": 28281.18
+        },
+        "best_cut_category": {
+          "ok": false,
+          "gold": "shopping",
+          "pred": "restaurants"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 1830,
+        "completion_tokens": 118,
+        "total_tokens": 1948,
+        "cost": 0.000844,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.000844,
+          "upstream_inference_prompt_cost": 0.000549,
+          "upstream_inference_completions_cost": 0.000295
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      },
+      "preview": "{\"optimize\": {\"best_single_cut\": {\"category\": \"restaurants\", \"spend\": null, \"cut_20pct_saves\": null}, \"discretionary_share\": 28281.18, \"subscription_annual_cost\": 0, \"playbook\": [\"Review your discretionary spending, especially in restaurants, to identify areas for reduction.\", \"Consider reducing your spending in the 'restaurants' category by 20% to save null annually.\", \"Evaluate all subscriptions and cancel any that are not essential to save 0 annually.\"]}}"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "codec": "img_summary_card",
+      "task": "forecasts",
+      "ok": true,
+      "accuracy": 0.0,
+      "passed": 0,
+      "total": 2,
+      "checks": {
+        "next_month_spend": {
+          "ok": false,
+          "reason": "not_numeric",
+          "gold": 2888.14,
+          "pred": null
+        },
+        "next_month_income": {
+          "ok": false,
+          "reason": "not_numeric",
+          "gold": 4581.06,
+          "pred": null
+        }
+      },
+      "usage": {
+        "prompt_tokens": 1767,
+        "completion_tokens": 61,
+        "total_tokens": 1828,
+        "cost": 0.0006826,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0006826,
+          "upstream_inference_prompt_cost": 0.0005301,
+          "upstream_inference_completions_cost": 0.0001525
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      },
+      "preview": "{\"forecasts\": {\"avg_monthly_spend_last3\": null, \"avg_monthly_income_last3\": null, \"next_month_spend_naive\": null, \"next_month_income_naive\": null, \"next_month_net_naive\": null}}"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "codec": "img_4col_1bit",
+      "task": "reports",
+      "ok": true,
+      "accuracy": 0.2,
+      "passed": 1,
+      "total": 5,
+      "checks": {
+        "n_transactions": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 1000.0,
+          "pred": 1000.0
+        },
+        "total_income": {
+          "ok": false,
+          "rel_error": 0.6464,
+          "gold": 90564.2,
+          "pred": 32027.9
+        },
+        "total_expense": {
+          "ok": false,
+          "rel_error": 0.5762,
+          "gold": 75572.82,
+          "pred": 32027.9
+        },
+        "net": {
+          "ok": false,
+          "rel_error": 1.0,
+          "gold": 14991.38,
+          "pred": 0.0
+        },
+        "top_category": {
+          "ok": false,
+          "gold": "rent",
+          "pred": "groc"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 3660,
+        "completion_tokens": 191,
+        "total_tokens": 3851,
+        "cost": 0.0015755,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0015755,
+          "upstream_inference_prompt_cost": 0.001098,
+          "upstream_inference_completions_cost": 0.0004775
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      },
+      "preview": "{\"reports\": {\"n_transactions\": 1000, \"n_income\": 100, \"n_expense\": 900, \"total_income\": 32027.9, \"total_expense\": 32027.9, \"net\": 0.0, \"top_category_by_spend\": \"groc\", \"top_category_spend\": 6000.0, \"top5_categories\": [{\"category\": \"groc\", \"spend\": 6000.0}, {\"category\": \"rest\", \"spend\": 5000.0}, {\"category\": \"shop\", \"spend\": 4000.0}, {\"category\": \"subs\", \"spend\": 3000.0}, {\"category\": \"educ\", \"spend\": 2500.0}]}}"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "codec": "img_4col_1bit",
+      "task": "optimize",
+      "ok": true,
+      "accuracy": 0.0,
+      "passed": 0,
+      "total": 2,
+      "checks": {
+        "discretionary_share": {
+          "ok": false,
+          "rel_error": 0.8939,
+          "gold": 28281.19,
+          "pred": 3000.06
+        },
+        "best_cut_category": {
+          "ok": false,
+          "gold": "shopping",
+          "pred": "restaurants"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 3706,
+        "completion_tokens": 131,
+        "total_tokens": 3837,
+        "cost": 0.0014393,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0014393,
+          "upstream_inference_prompt_cost": 0.0011118,
+          "upstream_inference_completions_cost": 0.0003275
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      },
+      "preview": "{\"optimize\": {\"best_single_cut\": {\"category\": \"restaurants\", \"spend\": 1000.02, \"cut_20pct_saves\": 200.00}, \"discretionary_share\": 3000.06, \"subscription_annual_cost\": 1200.00, \"playbook\": [\"Review and cut unnecessary subscriptions.\", \"Reduce spending in 'restaurants' by 20% to save 200.00.\", \"Consider reducing overall discretionary spending, which is currently 3000.06.\"]} }"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "codec": "img_4col_1bit",
+      "task": "forecasts",
+      "ok": true,
+      "accuracy": 0.0,
+      "passed": 0,
+      "total": 2,
+      "checks": {
+        "next_month_spend": {
+          "ok": false,
+          "rel_error": 0.6538,
+          "gold": 2888.14,
+          "pred": 1000.0
+        },
+        "next_month_income": {
+          "ok": false,
+          "rel_error": 0.3015,
+          "gold": 4581.06,
+          "pred": 3200.0
+        }
+      },
+      "usage": {
+        "prompt_tokens": 3643,
+        "completion_tokens": 119,
+        "total_tokens": 3762,
+        "cost": 0.0013904,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0013904,
+          "upstream_inference_prompt_cost": 0.0010929,
+          "upstream_inference_completions_cost": 0.0002975
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      },
+      "preview": "```json\n{\n  \"forecasts\": {\n    \"avg_monthly_spend_last3\": -1000.00,\n    \"avg_monthly_income_last3\": 3200.00,\n    \"next_month_spend_naive\": -1000.00,\n    \"next_month_income_naive\": 3200.00,\n    \"next_month_net_naive\": 2200.00\n  }\n}\n```"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "codec": "img_2tile_compact",
+      "task": "reports",
+      "ok": true,
+      "accuracy": 0.4,
+      "passed": 2,
+      "total": 5,
+      "checks": {
+        "n_transactions": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 1000.0,
+          "pred": 1000.0
+        },
+        "total_income": {
+          "ok": false,
+          "rel_error": 0.1042,
+          "gold": 90564.2,
+          "pred": 100000.0
+        },
+        "total_expense": {
+          "ok": false,
+          "rel_error": 0.1909,
+          "gold": 75572.82,
+          "pred": 90000.0
+        },
+        "net": {
+          "ok": false,
+          "rel_error": 0.333,
+          "gold": 14991.38,
+          "pred": 10000.0
+        },
+        "top_category": {
+          "ok": true,
+          "gold": "rent",
+          "pred": "rent"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 2688,
+        "completion_tokens": 206,
+        "total_tokens": 2894,
+        "cost": 0.0013214,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0013214,
+          "upstream_inference_prompt_cost": 0.0008064,
+          "upstream_inference_completions_cost": 0.000515
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      },
+      "preview": "{\"reports\": {\"n_transactions\": 1000, \"n_income\": 100, \"n_expense\": 900, \"total_income\": 100000.00, \"total_expense\": 90000.00, \"net\": 10000.00, \"top_category_by_spend\": \"rent\", \"top_category_spend\": 10000.00, \"top5_categories\": [{\"category\": \"rent\", \"spend\": 10000.00}, {\"category\": \"groceries\", \"spend\": 9000.00}, {\"category\": \"shopping\", \"spend\": 8000.00}, {\"category\": \"restaurants\", \"spend\": 7000.00}, {\"category\": \"transport\", \"spend\": 6000.00}]}}"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "codec": "img_2tile_compact",
+      "task": "optimize",
+      "ok": true,
+      "accuracy": 0.5,
+      "passed": 1,
+      "total": 2,
+      "checks": {
+        "discretionary_share": {
+          "ok": false,
+          "rel_error": 0.9929,
+          "gold": 28281.19,
+          "pred": 200.0
+        },
+        "best_cut_category": {
+          "ok": true,
+          "gold": "shopping",
+          "pred": "shopping"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 2734,
+        "completion_tokens": 119,
+        "total_tokens": 2853,
+        "cost": 0.0011177,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0011177,
+          "upstream_inference_prompt_cost": 0.0008202,
+          "upstream_inference_completions_cost": 0.0002975
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      },
+      "preview": "{\"optimize\": {\"best_single_cut\": {\"category\": \"shopping\", \"spend\": 100.0, \"cut_20pct_saves\": 20.0}, \"discretionary_share\": 200.0, \"subscription_annual_cost\": 120.0, \"playbook\": [\"Review your shopping habits, as it's your highest discretionary spend.\", \"Consider reducing your subscriptions to save 120.00 annually.\", \"Look for ways to cut down on restaurant meals and entertainment.\"]} }"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "codec": "img_2tile_compact",
+      "task": "forecasts",
+      "ok": true,
+      "accuracy": 0.0,
+      "passed": 0,
+      "total": 2,
+      "checks": {
+        "next_month_spend": {
+          "ok": false,
+          "rel_error": 0.9654,
+          "gold": 2888.14,
+          "pred": 100.0
+        },
+        "next_month_income": {
+          "ok": false,
+          "rel_error": 0.9782,
+          "gold": 4581.06,
+          "pred": 100.0
+        }
+      },
+      "usage": {
+        "prompt_tokens": 2671,
+        "completion_tokens": 84,
+        "total_tokens": 2755,
+        "cost": 0.0010113,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0010113,
+          "upstream_inference_prompt_cost": 0.0008013,
+          "upstream_inference_completions_cost": 0.00021
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      },
+      "preview": "{\"forecasts\": {\"avg_monthly_spend_last3\": 100.0, \"avg_monthly_income_last3\": 100.0, \"next_month_spend_naive\": 100.0, \"next_month_income_naive\": 100.0, \"next_month_net_naive\": 0.0}}"
+    }
+  ],
+  "summary": {
+    "by_codec_accuracy": {
+      "img_2tile_compact": 0.3,
+      "img_4col_1bit": 0.0667,
+      "img_monthly_table": 1.0,
+      "img_summary_card": 0.5
+    },
+    "by_model_accuracy": {
+      "google/gemini-2.5-flash": 0.4667
+    },
+    "prompt_tokens": 29249,
+    "completion_tokens": 1650,
+    "n_ok": 12,
+    "n_fail": 0
+  }
+}

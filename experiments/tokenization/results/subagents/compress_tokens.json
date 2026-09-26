@@ -1,0 +1,25 @@
+{
+  "tokenizer": "tiktoken o200k_base (GPT-5)",
+  "n_transactions": 1000,
+  "yaml_like": 12020,
+  "gzip_b64": 7864,
+  "dict_ids": 13186,
+  "aggregates_only": 709,
+  "codecs": {
+    "tiny_ledger_vm": {"gpt5_tokens": 5123, "chars": 11164, "reversible": true},
+    "freq_daypack": {"gpt5_tokens": 5170, "chars": 11361, "reversible": true},
+    "base62_daypack": {"gpt5_tokens": 5300, "chars": 9881, "reversible": true},
+    "daypack_names": {"gpt5_tokens": 6016, "chars": 19445, "reversible": true},
+    "rle_cat_delta": {"gpt5_tokens": 6228, "chars": 12396, "reversible": true},
+    "columnar_ints_only": {"gpt5_tokens": 7712, "chars": 12679, "reversible": true},
+    "month_dict_cents": {"gpt5_tokens": 7777, "chars": 13562, "reversible": true}
+  },
+  "ablation_from_yaml_like": {
+    "yaml_like": 12020,
+    "drop_list_dash": 11020,
+    "drop_indent": 9020,
+    "drop_per_row_category": 8020,
+    "cents_keep_names_and_category": 7790,
+    "cents_drop_category": 6790
+  }
+}
