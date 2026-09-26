@@ -102,10 +102,8 @@ def main() -> int:
                 log(note)
         else:
             log("skip ui (--no-ui)")
-        log("feature cli_api_down")
         stop(api)
         api = None
-        cli.run_api_down(env)
         log("feature drop")
         drop.run(env, directory)
         log("ok")
