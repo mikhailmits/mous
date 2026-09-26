@@ -11,10 +11,10 @@ use std::os::unix::fs::PermissionsExt;
 use std::os::unix::io::AsRawFd;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use mous_core::Store;
 use mous_proto::{paths, read_msg, write_msg, Request, Response};
@@ -167,56 +167,37 @@ fn main() {
 
     // Last-activity clock in epoch-millis for the idle watcher.
     let last_activity = Arc::new(AtomicU64::new(now_millis()));
-    let shutdown = Arc::new(AtomicBool::new(false));
-    let inflight = Arc::new(AtomicU64::new(0));
 
+    // Idle watcher: with a blocking accept there is no poll loop to notice a
+    // flag, so it retires the runtime files and exits the process directly.
     if cfg.idle_secs > 0 {
         let watcher_last = last_activity.clone();
-        let watcher_shutdown = shutdown.clone();
-        let idle = cfg.idle_secs;
+        let watcher_socket = socket_path.clone();
+        let idle_ms = cfg.idle_secs.saturating_mul(1000);
         thread::spawn(move || loop {
             thread::sleep(Duration::from_secs(5));
-            if watcher_shutdown.load(Ordering::SeqCst) {
-                return;
-            }
             let idle_for = now_millis().saturating_sub(watcher_last.load(Ordering::Relaxed));
-            if idle_for >= idle * 1000 {
-                watcher_shutdown.store(true, Ordering::SeqCst);
-                return;
+            if idle_for >= idle_ms {
+                retire_runtime(&watcher_socket);
+                std::process::exit(0);
             }
         });
     }
 
-    if let Err(e) = listener.set_nonblocking(true) {
-        eprintln!("mousd: cannot set nonblocking on {}: {e}", socket_path.display());
-        std::process::exit(1);
-    }
-    loop {
-        if shutdown.load(Ordering::SeqCst) {
-            break;
-        }
-        match listener.accept() {
-            Ok((stream, _)) => {
-                inflight.fetch_add(1, Ordering::SeqCst);
+    // Blocking accept: a waiting client is picked up immediately, with no
+    // polling latency. Each connection is served on its own thread; `Shutdown`
+    // exits the process from within the handler.
+    for stream in listener.incoming() {
+        match stream {
+            Ok(stream) => {
                 let store = store.clone();
                 let last = last_activity.clone();
-                let flag = shutdown.clone();
-                let inflight = inflight.clone();
-                thread::spawn(move || {
-                    handle_conn(stream, store, last, &flag);
-                    inflight.fetch_sub(1, Ordering::SeqCst);
-                });
+                let sock = socket_path.clone();
+                thread::spawn(move || handle_conn(stream, store, last, &sock));
             }
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock || e.kind() == io::ErrorKind::Interrupted => {
-                thread::sleep(Duration::from_millis(20));
-            }
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
             Err(_) => break,
         }
-    }
-
-    let deadline = Instant::now() + Duration::from_secs(2);
-    while inflight.load(Ordering::SeqCst) > 0 && Instant::now() < deadline {
-        thread::sleep(Duration::from_millis(20));
     }
     retire_runtime(&socket_path);
 }
@@ -250,12 +231,9 @@ fn handle_conn(
     mut stream: UnixStream,
     store: Arc<Mutex<Store>>,
     last_activity: Arc<AtomicU64>,
-    shutdown: &AtomicBool,
+    socket_path: &Path,
 ) {
     loop {
-        if shutdown.load(Ordering::SeqCst) {
-            return;
-        }
         let req: Request = match read_msg(&mut stream) {
             Ok(r) => r,
             Err(_) => return, // client closed or bad frame
@@ -268,8 +246,8 @@ fn handle_conn(
             return;
         }
         if is_shutdown {
-            shutdown.store(true, Ordering::SeqCst);
-            return;
+            retire_runtime(socket_path);
+            std::process::exit(0);
         }
     }
 }
