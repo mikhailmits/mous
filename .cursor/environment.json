@@ -1,0 +1,11 @@
+{
+  "name": "mous",
+  "install": "bash .cursor/install.sh",
+  "terminals": [
+    {
+      "name": "api",
+      "command": "export PATH=\"$HOME/.local/bin:$PATH\" && uv run mous serve"
+    }
+  ],
+  "ports": [8000]
+}
