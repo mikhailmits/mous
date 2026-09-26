@@ -80,21 +80,6 @@ func apiClientChecks() async {
 
     script.handler = { _ in
         MouResult(status: 0, stdout: Data("""
-        {"id":4,"symbol":"usd","name":"US Dollar","is_default":true}
-        """.utf8), stderr: Data())
-    }
-    do {
-        let currency = try await client.createCurrency(symbol: "usd", name: "US Dollar", isDefault: true)
-        Check.equal(currency.symbol, "usd")
-        Check.equal(currency.name, "US Dollar")
-        Check.true(currency.isDefault)
-        Check.equal(script.last(), ["cur", "new", "usd", "--name", "US Dollar", "--default", "--json"])
-    } catch {
-        Check.fail("createCurrency failed: \(error)")
-    }
-
-    script.handler = { _ in
-        MouResult(status: 0, stdout: Data("""
         {"id":1,"symbol":"eur","name":"Euro","is_default":true}
         """.utf8), stderr: Data())
     }

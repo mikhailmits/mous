@@ -327,7 +327,6 @@ public final class AppStore {
         currencies = try await client.currencies()
         currenciesLoading = false
         applyDisplayCurrencyFromConfig()
-        await ensureQuoteCurrencies()
         await syncPreferredDefaultCurrency()
         mainAccount = Account(id: 0, name: "main")
     }
@@ -380,55 +379,20 @@ public final class AppStore {
         if !hideBalance { balancePeek = false }
     }
 
-    /// EUR, USD, and UAH have to exist or `-450 uah` is stored as euros with a note.
-    private func ensureQuoteCurrencies() async {
-        for pref in MousCurrencyPref.allCases {
-            if currencyMatching(pref.rawValue) != nil { continue }
-            do {
-                let created = try await client.createCurrency(
-                    symbol: pref.rawValue,
-                    name: pref.englishName,
-                    isDefault: false
-                )
-                if !currencies.contains(where: { $0.id == created.id }) {
-                    currencies.append(created)
-                }
-            } catch {
-                if let list = try? await client.currencies() {
-                    currencies = list
-                }
-            }
-        }
-    }
-
     /// Make config `currency` the API default so unsuffixed quick-entry uses it.
+    /// `--set-default` auto-creates the currency if the daemon has not seen it
+    /// yet, so there is no separate "create currency" step (and no `cur new`).
     private func syncPreferredDefaultCurrency() async {
         let pref = MousCurrencyPref.pref(for: MousConfigFile.load().currency)
         let symbol = pref.rawValue
+        if let existing = currencyMatching(symbol), existing.isDefault {
+            return
+        }
         do {
-            if let existing = currencyMatching(symbol) {
-                if !existing.isDefault {
-                    adopt(try await client.setDefaultCurrency(symbol: existing.symbol))
-                }
-                return
-            }
-            let created = try await client.createCurrency(
-                symbol: symbol,
-                name: pref.englishName,
-                isDefault: true
-            )
-            adopt(created)
-            if !created.isDefault {
-                adopt(try await client.setDefaultCurrency(symbol: created.symbol))
-            }
+            adopt(try await client.setDefaultCurrency(symbol: symbol))
         } catch {
-            do {
-                currencies = try await client.currencies()
-                if let existing = currencyMatching(symbol), !existing.isDefault {
-                    adopt(try await client.setDefaultCurrency(symbol: existing.symbol))
-                }
-            } catch {
-                return
+            if let list = try? await client.currencies() {
+                currencies = list
             }
         }
     }

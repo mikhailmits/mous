@@ -169,14 +169,6 @@ public actor APIClient {
         return rows.map(\.domain)
     }
 
-    public func createCurrency(symbol: String, name: String, isDefault: Bool) async throws -> Currency {
-        var args = ["cur", "new", symbol, "--name", name]
-        if isDefault { args.append("--default") }
-        args.append("--json")
-        let dto: CurrencyDTO = try decode(try await invoke(args))
-        return dto.domain
-    }
-
     public func setDefaultCurrency(symbol: String) async throws -> Currency {
         let dto: CurrencyDTO = try decode(
             try await invoke(["cur", "--set-default", symbol, "--json"])
