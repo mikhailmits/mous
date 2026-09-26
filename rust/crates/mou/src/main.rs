@@ -352,23 +352,22 @@ fn print_yaml<T: serde::Serialize>(value: &T) {
     }
 }
 
-fn money(amount: f64, symbol: &str, convertible: bool) -> String {
-    let marker = if convertible { "" } else { "*" };
-    format!("{amount:.2} {symbol}{marker}")
-}
-
 fn print_tx_table(txs: &[TxView]) {
     if txs.is_empty() {
         println!("(no transactions)");
         return;
     }
     let mut rows: Vec<[String; 6]> = Vec::with_capacity(txs.len());
+    let mut any_native = false;
     for tx in txs {
         let category = tx.category.clone().unwrap_or_else(|| "-".into());
-        let native = if tx.currency == tx.display_currency {
-            String::new()
+        // Always display in the default currency; only fall back to the native
+        // currency (marked '*') when there is no FX quote to convert with.
+        let amount = if tx.convertible {
+            format!("{:.2} {}", tx.amount, tx.display_currency)
         } else {
-            format!("{:.2} {}", tx.value, tx.currency)
+            any_native = true;
+            format!("{:.2} {}*", tx.value, tx.currency)
         };
         let recurring = if tx.recurring.is_empty() {
             String::new()
@@ -380,15 +379,15 @@ fn print_tx_table(txs: &[TxView]) {
             tx.occurred_on.clone(),
             tx.name.clone(),
             category,
-            money(tx.amount, &tx.display_currency, tx.convertible),
-            format!("{native} {recurring}").trim().to_string(),
+            amount,
+            recurring,
         ]);
     }
-    let headers = ["ID", "DATE", "NAME", "CATEGORY", "AMOUNT", "NATIVE/RECUR"];
+    let headers = ["ID", "DATE", "NAME", "CATEGORY", "AMOUNT", "RECUR"];
     print_table(&headers, &rows);
-    if txs.iter().any(|t| !t.convertible) {
+    if any_native {
         println!(
-            "* shown in native currency (no FX quote to {})",
+            "* no FX quote to {}; shown in native currency",
             txs[0].display_currency
         );
     }
