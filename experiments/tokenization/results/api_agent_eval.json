@@ -1,0 +1,145 @@
+{
+  "model": "qwen/qwen-2.5-7b-instruct",
+  "source": "live_api_tool_views",
+  "results": [
+    {
+      "task": "reports",
+      "accuracy": 1.0,
+      "checks": {
+        "n_transactions": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 1000.0,
+          "pred": 1000.0
+        },
+        "total_income": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 90564.2,
+          "pred": 90564.2
+        },
+        "total_expense": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 75572.82,
+          "pred": 75572.82
+        },
+        "net": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 14991.38,
+          "pred": 14991.38
+        },
+        "top_category": {
+          "ok": true,
+          "gold": "rent",
+          "pred": "rent"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 1084,
+        "completion_tokens": 225,
+        "total_tokens": 1309,
+        "cost": 0.0001534,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 81,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0001534,
+          "upstream_inference_prompt_cost": 0.0001084,
+          "upstream_inference_completions_cost": 4.5e-05
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "task": "optimize",
+      "accuracy": 1.0,
+      "checks": {
+        "discretionary_share": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 28281.19,
+          "pred": 28281.19
+        },
+        "best_cut_category": {
+          "ok": true,
+          "gold": "shopping",
+          "pred": "shopping"
+        }
+      },
+      "usage": {
+        "prompt_tokens": 1131,
+        "completion_tokens": 114,
+        "total_tokens": 1245,
+        "cost": 0.0001359,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 81,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0001359,
+          "upstream_inference_prompt_cost": 0.0001131,
+          "upstream_inference_completions_cost": 2.28e-05
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    {
+      "task": "forecasts",
+      "accuracy": 1.0,
+      "checks": {
+        "next_month_spend": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 2888.14,
+          "pred": 2888.14
+        },
+        "next_month_income": {
+          "ok": true,
+          "rel_error": 0.0,
+          "gold": 4581.06,
+          "pred": 4581.06
+        }
+      },
+      "usage": {
+        "prompt_tokens": 1069,
+        "completion_tokens": 133,
+        "total_tokens": 1202,
+        "cost": 0.0001335,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 241,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0001335,
+          "upstream_inference_prompt_cost": 0.0001069,
+          "upstream_inference_completions_cost": 2.66e-05
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    }
+  ]
+}

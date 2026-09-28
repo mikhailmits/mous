@@ -34,6 +34,12 @@ data.db-shm
 .env.*
 !.env.example
 
+# Tokenization experiment caches / bulky artifacts
+experiments/tokenization/.cache/
+experiments/tokenization/results/images/
+experiments/tokenization/results/llm_raw/
+experiments/tokenization/results/*.png
+
 # Swift / Xcode
 **/.build/
 **/.swiftpm/

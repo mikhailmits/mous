@@ -1,0 +1,39 @@
+{
+  "ok": true,
+  "model": "openai/gpt-4.1-mini",
+  "codec": "freq_daypack",
+  "passed": 0,
+  "total": 4,
+  "checks": {
+    "n_transactions": {
+      "ok": false,
+      "gold": 1000.0,
+      "pred": 1323.0,
+      "rel_error": 0.323
+    },
+    "total_income": {
+      "ok": false,
+      "gold": 90564.2,
+      "pred": 1327.89,
+      "rel_error": 0.9853
+    },
+    "total_expense": {
+      "ok": false,
+      "gold": 75572.82,
+      "pred": 132494.88,
+      "rel_error": 0.7532
+    },
+    "top_category_by_spend": {
+      "ok": false,
+      "gold": "rent",
+      "pred": "groceries"
+    }
+  },
+  "usage": {
+    "prompt_tokens": 5432,
+    "completion_tokens": 36,
+    "total_tokens": 5468,
+    "cost": 0.0022304
+  },
+  "preview": "{\"reports\":{\"n_transactions\":1323,\"total_income\":1327.89,\"total_expense\":132494.88,\"top_category_by_spend\":\"groceries\"}}"
+}
